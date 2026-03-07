@@ -149,6 +149,21 @@ open http://localhost:3000
 
 For detailed setup instructions, environment configuration, and self-hosting guides, see the [documentation](https://docs.rxresu.me).
 
+## Desktop Development (Electron)
+
+Desktop scaffolding is available for local macOS development.
+
+```bash
+# Run web server + Electron shell
+pnpm run desktop:dev
+
+# Build web assets and package a macOS artifact
+pnpm run desktop:build
+```
+
+`desktop:build` outputs artifacts under `dist-desktop/`.
+On first run, desktop commands download pinned Electron tooling via `npm exec`.
+
 ## Tech Stack
 
 | Category         | Technology                           |
