@@ -13,6 +13,8 @@ export const env = createEnv({
 		TZ: z.string().default("Etc/UTC"),
 		APP_URL: z.url({ protocol: /https?/ }),
 		PRINTER_APP_URL: z.url({ protocol: /https?/ }).optional(),
+		DESKTOP_MODE: z.stringbool().default(false),
+		ELECTRON_MANAGED_BACKEND: z.stringbool().default(false),
 
 		// Printer
 		PRINTER_ENDPOINT: z.url({ protocol: /^(wss?|https?)$/ }),

@@ -1,5 +1,23 @@
 import { spawn } from "node:child_process";
 
+const NPM_BIN = process.platform === "win32" ? "npm.cmd" : "npm";
+
+const electron = spawn(
+	NPM_BIN,
+	[
+		"exec",
+		"--yes",
+		"--package=electron@35.0.1",
+		"electron",
+		"electron/main.cjs",
+	],
+	{
+		stdio: "inherit",
+		env: process.env,
+	},
+);
+
+electron.on("exit", (code) => {
 const STARTUP_TIMEOUT_MS = 120_000;
 const RETRY_INTERVAL_MS = 750;
 const DEV_SERVER_URL = process.env.ELECTRON_DEV_SERVER_URL ?? "http://127.0.0.1:3000";
