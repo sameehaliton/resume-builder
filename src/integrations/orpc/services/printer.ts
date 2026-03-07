@@ -1,4 +1,6 @@
 import { ORPCError } from "@orpc/server";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type { InferSelectModel } from "drizzle-orm";
 import puppeteer, { type Browser, type ConnectOptions, type Page } from "puppeteer-core";
 import type { schema } from "@/integrations/drizzle";
@@ -9,33 +11,161 @@ import { generatePrinterToken } from "@/utils/printer-token";
 import { getStorageService, uploadFile } from "./storage";
 
 const SCREENSHOT_TTL = 1000 * 60 * 60 * 6; // 6 hours
+const BROWSER_ARGS = ["--disable-dev-shm-usage", "--disable-features=LocalNetworkAccessChecks,site-per-process,FedCm"];
+const LOCAL_PRINTER_RUNTIME_MISSING_MESSAGE =
+	"Desktop PDF export requires a local Chrome/Chromium runtime. Install Chrome or set PRINTER_EXECUTABLE_PATH.";
+
+type PrinterRuntimeMode = "local" | "remote";
 
 // Singleton browser instance for connection reuse
 let browserInstance: Browser | null = null;
+let browserRuntimeMode: PrinterRuntimeMode | null = null;
 
-async function getBrowser(): Promise<Browser> {
-	// Reuse existing connected browser if available
-	if (browserInstance?.connected) return browserInstance;
+class MissingLocalPrinterRuntimeError extends Error {
+	constructor() {
+		super(LOCAL_PRINTER_RUNTIME_MISSING_MESSAGE);
+		this.name = "MissingLocalPrinterRuntimeError";
+	}
+}
 
-	const args = ["--disable-dev-shm-usage", "--disable-features=LocalNetworkAccessChecks,site-per-process,FedCm"];
+function getErrorMessage(error: unknown): string {
+	if (error instanceof Error) return error.message;
+	return String(error);
+}
 
+function getPrinterRuntimeMode(): PrinterRuntimeMode {
+	return env.DESKTOP_MODE ? "local" : "remote";
+}
+
+function getPrinterAppUrl(): string {
+	// Desktop mode should always render from the locally managed backend URL.
+	if (env.DESKTOP_MODE) return env.APP_URL;
+	return env.PRINTER_APP_URL ?? env.APP_URL;
+}
+
+function getLocalExecutableCandidates(): string[] {
+	const envCandidates = [process.env.PRINTER_EXECUTABLE_PATH, process.env.PUPPETEER_EXECUTABLE_PATH].filter(
+		(value): value is string => Boolean(value?.trim()),
+	);
+
+	if (process.platform === "darwin") {
+		return [
+			...envCandidates,
+			"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+			"/Applications/Chromium.app/Contents/MacOS/Chromium",
+		];
+	}
+
+	if (process.platform === "win32") {
+		const programFiles = process.env.PROGRAMFILES ?? "C:\\Program Files";
+		const programFilesX86 = process.env["PROGRAMFILES(X86)"] ?? "C:\\Program Files (x86)";
+		const localAppData = process.env.LOCALAPPDATA ?? "";
+
+		return [
+			...envCandidates,
+			join(programFiles, "Google", "Chrome", "Application", "chrome.exe"),
+			join(programFilesX86, "Google", "Chrome", "Application", "chrome.exe"),
+			join(localAppData, "Google", "Chrome", "Application", "chrome.exe"),
+		];
+	}
+
+	return [
+		...envCandidates,
+		"/usr/bin/google-chrome-stable",
+		"/usr/bin/google-chrome",
+		"/usr/bin/chromium-browser",
+		"/usr/bin/chromium",
+		"/snap/bin/chromium",
+	];
+}
+
+function resolveLocalExecutablePath(): string | null {
+	const candidates = getLocalExecutableCandidates();
+	for (const candidate of candidates) {
+		if (existsSync(candidate)) return candidate;
+	}
+
+	return null;
+}
+
+function isMissingLocalRuntimeError(error: unknown): boolean {
+	if (error instanceof MissingLocalPrinterRuntimeError) return true;
+
+	const message = getErrorMessage(error).toLowerCase();
+	return (
+		message.includes("could not find chrome") ||
+		message.includes("could not find chromium") ||
+		message.includes("executablepath") ||
+		message.includes("browser was not found") ||
+		message.includes("failed to launch the browser process") ||
+		message.includes("spawn") && message.includes("enoent")
+	);
+}
+
+function toPrinterORPCError(error: unknown): ORPCError {
+	if (error instanceof ORPCError) return error;
+
+	if (getPrinterRuntimeMode() === "local" && isMissingLocalRuntimeError(error)) {
+		return new ORPCError("INTERNAL_SERVER_ERROR", {
+			status: 503,
+			message: LOCAL_PRINTER_RUNTIME_MISSING_MESSAGE,
+		});
+	}
+
+	return new ORPCError("INTERNAL_SERVER_ERROR", {
+		message: getErrorMessage(error),
+	});
+}
+
+async function connectRemoteBrowser(): Promise<Browser> {
 	const endpoint = new URL(env.PRINTER_ENDPOINT);
 	const isWebSocket = endpoint.protocol.startsWith("ws");
 	const connectOptions: ConnectOptions = { acceptInsecureCerts: true };
 
-	endpoint.searchParams.append("launch", JSON.stringify({ args }));
+	endpoint.searchParams.append("launch", JSON.stringify({ args: BROWSER_ARGS }));
 
 	if (isWebSocket) connectOptions.browserWSEndpoint = endpoint.toString();
 	else connectOptions.browserURL = endpoint.toString();
 
-	browserInstance = await puppeteer.connect(connectOptions);
+	return puppeteer.connect(connectOptions);
+}
+
+async function launchLocalBrowser(): Promise<Browser> {
+	const executablePath = resolveLocalExecutablePath();
+	if (!executablePath) throw new MissingLocalPrinterRuntimeError();
+
+	try {
+		return await puppeteer.launch({
+			headless: true,
+			executablePath,
+			args: BROWSER_ARGS,
+		});
+	} catch (error) {
+		if (isMissingLocalRuntimeError(error)) throw new MissingLocalPrinterRuntimeError();
+		throw error;
+	}
+}
+
+async function getBrowser(): Promise<Browser> {
+	// Reuse existing connected browser if available
+	const runtimeMode = getPrinterRuntimeMode();
+	if (browserInstance?.connected && browserRuntimeMode === runtimeMode) return browserInstance;
+
+	await closeBrowser();
+
+	browserInstance = runtimeMode === "local" ? await launchLocalBrowser() : await connectRemoteBrowser();
+	browserRuntimeMode = runtimeMode;
 	return browserInstance;
 }
 
 async function closeBrowser(): Promise<void> {
-	if (browserInstance?.connected) {
-		await browserInstance.close();
+	if (!browserInstance) return;
+
+	try {
+		if (browserInstance.connected) await browserInstance.close();
+	} finally {
 		browserInstance = null;
+		browserRuntimeMode = null;
 	}
 }
 
@@ -52,6 +182,14 @@ process.on("SIGTERM", async () => {
 
 export const printerService = {
 	healthcheck: async (): Promise<object> => {
+		if (getPrinterRuntimeMode() === "local") {
+			const browser = await getBrowser();
+			return {
+				mode: "local",
+				version: await browser.version(),
+			};
+		}
+
 		const headers = new Headers({ Accept: "application/json" });
 		const endpoint = new URL(env.PRINTER_ENDPOINT);
 
@@ -88,7 +226,7 @@ export const printerService = {
 
 		// Step 2: Prepare the URL and authentication for the printer route
 		// The printer route renders the resume in a format optimized for PDF generation
-		const baseUrl = env.PRINTER_APP_URL ?? env.APP_URL;
+		const baseUrl = getPrinterAppUrl();
 		const domain = new URL(baseUrl).hostname;
 
 		const format = data.metadata.page.format;
@@ -274,7 +412,7 @@ export const printerService = {
 
 			return result.url;
 		} catch (error) {
-			throw new ORPCError("INTERNAL_SERVER_ERROR", error as Error);
+			throw toPrinterORPCError(error);
 		} finally {
 			if (page) await page.close().catch(() => null);
 		}
@@ -321,7 +459,7 @@ export const printerService = {
 			}
 		}
 
-		const baseUrl = env.PRINTER_APP_URL ?? env.APP_URL;
+		const baseUrl = getPrinterAppUrl();
 		const domain = new URL(baseUrl).hostname;
 
 		const locale = data.metadata.page.locale;
@@ -355,7 +493,7 @@ export const printerService = {
 
 			return result.url;
 		} catch (error) {
-			throw new ORPCError("INTERNAL_SERVER_ERROR", error as Error);
+			throw toPrinterORPCError(error);
 		} finally {
 			if (page) await page.close().catch(() => null);
 		}
