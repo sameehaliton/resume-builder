@@ -4,6 +4,7 @@
 	"version": "5.0.11",
 	"license": "MIT",
 	"type": "module",
+	"main": "electron/main.cjs",
 	"packageManager": "pnpm@10.30.3+sha512.c961d1e0a2d8e354ecaa5166b822516668b7f44cb5bd95122d590dd81922f606f5473b6d23ec4a5be05e7fcd18e8488d47d978bbe981872f1145d06e9a740017",
 	"repository": {
 		"type": "git",
@@ -21,6 +22,8 @@
 		"db:pull": "drizzle-kit pull",
 		"db:push": "drizzle-kit push",
 		"db:studio": "drizzle-kit studio",
+		"desktop:build": "pnpm build && npm exec --yes --package=electron@35.0.1 --package=electron-builder@26.0.12 electron-builder --mac",
+		"desktop:dev": "node electron/dev.mjs",
 		"dev": "vite dev",
 		"preview": "vite preview",
 		"docs:dev": "cd docs && npx mint dev",
@@ -138,6 +141,25 @@
 		"typescript": "^5.9.3",
 		"vite": "8.0.0-beta.16",
 		"vite-plugin-pwa": "^1.2.0"
+	},
+	"build": {
+		"appId": "me.rxresu.desktop",
+		"productName": "Reactive Resume",
+		"directories": {
+			"output": "dist-desktop"
+		},
+		"files": [
+			"electron/**/*",
+			".output/**/*",
+			"package.json"
+		],
+		"mac": {
+			"category": "public.app-category.productivity",
+			"target": [
+				"dmg",
+				"zip"
+			]
+		}
 	},
 	"pnpm": {
 		"overrides": {
