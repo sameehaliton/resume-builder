@@ -30,6 +30,7 @@
 		"knip": "knip",
 		"lingui:extract": "lingui extract --clean --overwrite",
 		"lint": "biome check --write",
+		"smoke": "node scripts/smoke.mjs",
 		"start": "node .output/server/index.mjs",
 		"typecheck": "tsc --noEmit"
 	},
