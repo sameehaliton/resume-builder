@@ -14,6 +14,7 @@ export const env = createEnv({
 		APP_URL: z.url({ protocol: /https?/ }),
 		PRINTER_APP_URL: z.url({ protocol: /https?/ }).optional(),
 		DESKTOP_MODE: z.stringbool().default(false),
+		DESKTOP_APP_SUPPORT_PATH: z.string().min(1).optional(),
 		ELECTRON_MANAGED_BACKEND: z.stringbool().default(false),
 
 		// Printer
