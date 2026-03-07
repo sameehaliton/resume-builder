@@ -12,6 +12,7 @@ import { useCSSVariables } from "@/components/resume/hooks/use-css-variables";
 import { useResumeStore } from "@/components/resume/store/resume";
 import { ResizableGroup, ResizablePanel, ResizableSeparator } from "@/components/ui/resizable";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { resolveDesktopSession } from "@/integrations/auth/local-session";
 import { orpc } from "@/integrations/orpc/client";
 import { BuilderHeader } from "./-components/header";
 import { BuilderSidebarLeft } from "./-sidebar/left";
@@ -21,8 +22,9 @@ import { useBuilderSidebar, useBuilderSidebarStore } from "./-store/sidebar";
 export const Route = createFileRoute("/builder/$resumeId")({
 	component: RouteComponent,
 	beforeLoad: async ({ context }) => {
-		if (!context.session) throw redirect({ to: "/auth/login", replace: true });
-		return { session: context.session };
+		const session = resolveDesktopSession(context.session);
+		if (!session) throw redirect({ to: "/auth/login", replace: true });
+		return { session };
 	},
 	loader: async ({ params, context }) => {
 		const [layout, resume] = await Promise.all([

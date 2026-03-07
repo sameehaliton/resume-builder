@@ -1,13 +1,15 @@
 import { createFileRoute, Outlet, redirect, useRouter } from "@tanstack/react-router";
 import { SidebarProvider } from "@/components/ui/sidebar";
+import { resolveDesktopSession } from "@/integrations/auth/local-session";
 import { getDashboardSidebarServerFn, setDashboardSidebarServerFn } from "./-components/functions";
 import { DashboardSidebar } from "./-components/sidebar";
 
 export const Route = createFileRoute("/dashboard")({
 	component: RouteComponent,
 	beforeLoad: async ({ context }) => {
-		if (!context.session) throw redirect({ to: "/auth/login", replace: true });
-		return { session: context.session };
+		const session = resolveDesktopSession(context.session);
+		if (!session) throw redirect({ to: "/auth/login", replace: true });
+		return { session };
 	},
 	loader: async () => {
 		const sidebarState = await getDashboardSidebarServerFn();

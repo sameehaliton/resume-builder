@@ -8,6 +8,14 @@ import { db } from "@/integrations/drizzle/client";
 import { env } from "@/utils/env";
 import { hashPassword, verifyPassword } from "@/utils/password";
 import { generateId, toUsername } from "@/utils/string";
+import {
+	createDesktopLocalSession,
+	DESKTOP_LOCAL_USER_EMAIL,
+	DESKTOP_LOCAL_USER_ID,
+	DESKTOP_LOCAL_USER_NAME,
+	DESKTOP_LOCAL_USERNAME,
+	isDesktopMode,
+} from "./local-session";
 import { schema } from "../drizzle";
 import { sendEmail } from "../email/service";
 
@@ -35,6 +43,46 @@ function getTrustedOrigins(): string[] {
 	}
 
 	return Array.from(trustedOrigins);
+}
+
+async function ensureDesktopLocalUser() {
+	const [existingUser] = await db.select().from(schema.user).where(eq(schema.user.id, DESKTOP_LOCAL_USER_ID)).limit(1);
+	if (existingUser) return existingUser;
+
+	await db
+		.insert(schema.user)
+		.values({
+			id: DESKTOP_LOCAL_USER_ID,
+			name: DESKTOP_LOCAL_USER_NAME,
+			email: DESKTOP_LOCAL_USER_EMAIL,
+			username: DESKTOP_LOCAL_USERNAME,
+			displayUsername: DESKTOP_LOCAL_USERNAME,
+			emailVerified: true,
+			twoFactorEnabled: false,
+		})
+		.onConflictDoNothing({ target: schema.user.id });
+
+	const [createdUser] = await db.select().from(schema.user).where(eq(schema.user.id, DESKTOP_LOCAL_USER_ID)).limit(1);
+	if (!createdUser) throw new BetterAuthError("Unable to initialize the desktop local session user.");
+
+	return createdUser;
+}
+
+async function getDesktopLocalSession() {
+	const user = await ensureDesktopLocalUser();
+
+	return createDesktopLocalSession({
+		id: user.id,
+		name: user.name,
+		email: user.email,
+		image: user.image,
+		emailVerified: user.emailVerified,
+		username: user.username,
+		displayUsername: user.displayUsername,
+		twoFactorEnabled: user.twoFactorEnabled,
+		createdAt: user.createdAt,
+		updatedAt: user.updatedAt,
+	});
 }
 
 const getAuthConfig = () => {
@@ -250,4 +298,22 @@ const getAuthConfig = () => {
 	});
 };
 
-export const auth = getAuthConfig();
+const authConfig = getAuthConfig();
+
+if (isDesktopMode()) {
+	const originalGetSession = authConfig.api.getSession.bind(authConfig.api);
+
+	const desktopAwareGetSession = async (...args: Parameters<typeof originalGetSession>) => {
+		try {
+			const result = await originalGetSession(...args);
+			if (result?.user) return result;
+		} catch {}
+
+		return (await getDesktopLocalSession()) as Awaited<ReturnType<typeof originalGetSession>>;
+	};
+
+	(authConfig.api as { getSession: typeof authConfig.api.getSession }).getSession =
+		desktopAwareGetSession as typeof authConfig.api.getSession;
+}
+
+export const auth = authConfig;
