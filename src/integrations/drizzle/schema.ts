@@ -3,6 +3,18 @@ import * as sqlite from "drizzle-orm/sqlite-core";
 import { defaultResumeData, type ResumeData } from "../../schema/resume/data";
 import { generateId } from "../../utils/string";
 
+export const packetStatuses = [
+	"draft",
+	"ready",
+	"applied",
+	"interview",
+	"offer",
+	"rejected",
+	"archived",
+] as const;
+
+export type PacketStatus = (typeof packetStatuses)[number];
+
 const timestamp = () =>
 	sqlite
 		.integer({ mode: "timestamp" })
@@ -192,6 +204,68 @@ export const resumeStatistics = sqlite.sqliteTable("resume_statistics", {
 	createdAt: sqlite.integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 	updatedAt: timestamp(),
 });
+
+export const resumeSnapshot = sqlite.sqliteTable(
+	"resume_snapshot",
+	{
+		id: sqlite
+			.text("id")
+			.notNull()
+			.primaryKey()
+			.$defaultFn(() => generateId()),
+		resumeId: sqlite
+			.text("resume_id")
+			.notNull()
+			.references(() => resume.id, { onDelete: "cascade" }),
+		userId: sqlite
+			.text("user_id")
+			.notNull()
+			.references(() => user.id, { onDelete: "cascade" }),
+		resumeName: sqlite.text("resume_name").notNull(),
+		sourceResumeUpdatedAt: sqlite.integer("source_resume_updated_at", { mode: "timestamp" }).notNull(),
+		data: sqlite.text("data", { mode: "json" }).$type<ResumeData>().notNull(),
+		createdAt: sqlite.integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+	},
+	(t) => [
+		sqlite.index("resume_snapshot_user_id_index").on(t.userId),
+		sqlite.index("resume_snapshot_resume_id_index").on(t.resumeId),
+		sqlite.index("resume_snapshot_created_at_index").on(t.createdAt),
+	],
+);
+
+export const packet = sqlite.sqliteTable(
+	"packet",
+	{
+		id: sqlite
+			.text("id")
+			.notNull()
+			.primaryKey()
+			.$defaultFn(() => generateId()),
+		userId: sqlite
+			.text("user_id")
+			.notNull()
+			.references(() => user.id, { onDelete: "cascade" }),
+		resumeId: sqlite
+			.text("resume_id")
+			.notNull()
+			.references(() => resume.id, { onDelete: "cascade" }),
+		snapshotId: sqlite
+			.text("snapshot_id")
+			.notNull()
+			.references(() => resumeSnapshot.id, { onDelete: "cascade" }),
+		title: sqlite.text("title").notNull(),
+		status: sqlite.text("status").$type<PacketStatus>().notNull().default("draft"),
+		createdAt: sqlite.integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+		updatedAt: timestamp(),
+	},
+	(t) => [
+		sqlite.index("packet_user_id_index").on(t.userId),
+		sqlite.index("packet_resume_id_index").on(t.resumeId),
+		sqlite.index("packet_snapshot_id_index").on(t.snapshotId),
+		sqlite.index("packet_status_user_id_index").on(t.status, t.userId),
+		sqlite.index("packet_updated_at_index").on(t.updatedAt),
+	],
+);
 
 export const apikey = sqlite.sqliteTable(
 	"apikey",
