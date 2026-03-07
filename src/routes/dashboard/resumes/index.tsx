@@ -19,6 +19,7 @@ import { cn } from "@/utils/style";
 import { DashboardHeader } from "../-components/header";
 import { GridView } from "./-components/grid-view";
 import { ListView } from "./-components/list-view";
+import { PacketLifecyclePanel } from "./-components/packet-lifecycle";
 
 type SortOption = "lastUpdatedAt" | "createdAt" | "name";
 
@@ -132,6 +133,8 @@ function RouteComponent() {
 			</div>
 
 			{view === "list" ? <ListView resumes={resumes ?? []} /> : <GridView resumes={resumes ?? []} />}
+
+			<PacketLifecyclePanel />
 		</div>
 	);
 }
