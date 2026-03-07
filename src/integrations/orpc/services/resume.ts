@@ -1,5 +1,5 @@
 import { ORPCError } from "@orpc/client";
-import { and, arrayContains, asc, desc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { get } from "es-toolkit/compat";
 import type { Operation } from "fast-json-patch";
 import { match } from "ts-pattern";
@@ -14,6 +14,20 @@ import { applyResumePatches, ResumePatchError } from "@/utils/resume/patch";
 import { generateId } from "@/utils/string";
 import { grantResumeAccess, hasResumeAccess } from "../helpers/resume-access";
 import { getStorageService } from "./storage";
+
+const isResumeSlugUniqueViolation = (error: unknown) => {
+	const constraint = get(error, "cause.constraint") as string | undefined;
+	if (constraint === "resume_slug_user_id_unique") return true;
+
+	const message = [
+		get(error, "message") as string | undefined,
+		get(error, "cause.message") as string | undefined,
+	]
+		.filter(Boolean)
+		.join(" ");
+
+	return message.includes("UNIQUE constraint failed: resume.slug, resume.user_id");
+};
 
 const tags = {
 	list: async (input: { userId: string }) => {
@@ -55,8 +69,8 @@ const statistics = {
 	increment: async (input: { id: string; views?: boolean; downloads?: boolean }) => {
 		const views = input.views ? 1 : 0;
 		const downloads = input.downloads ? 1 : 0;
-		const lastViewedAt = input.views ? sql`now()` : undefined;
-		const lastDownloadedAt = input.downloads ? sql`now()` : undefined;
+		const lastViewedAt = input.views ? new Date() : undefined;
+		const lastDownloadedAt = input.downloads ? new Date() : undefined;
 
 		await db
 			.insert(schema.resumeStatistics)
@@ -84,7 +98,7 @@ export const resumeService = {
 	statistics,
 
 	list: async (input: { userId: string; tags: string[]; sort: "lastUpdatedAt" | "createdAt" | "name" }) => {
-		return await db
+		const resumes = await db
 			.select({
 				id: schema.resume.id,
 				name: schema.resume.name,
@@ -96,14 +110,7 @@ export const resumeService = {
 				updatedAt: schema.resume.updatedAt,
 			})
 			.from(schema.resume)
-			.where(
-				and(
-					eq(schema.resume.userId, input.userId),
-					match(input.tags.length)
-						.with(0, () => undefined)
-						.otherwise(() => arrayContains(schema.resume.tags, input.tags)),
-				),
-			)
+			.where(eq(schema.resume.userId, input.userId))
 			.orderBy(
 				match(input.sort)
 					.with("lastUpdatedAt", () => desc(schema.resume.updatedAt))
@@ -111,6 +118,9 @@ export const resumeService = {
 					.with("name", () => asc(schema.resume.name))
 					.exhaustive(),
 			);
+
+		if (input.tags.length === 0) return resumes;
+		return resumes.filter((resume) => input.tags.every((tag) => resume.tags.includes(tag)));
 	},
 
 	getById: async (input: { id: string; userId: string }) => {
@@ -257,9 +267,7 @@ export const resumeService = {
 
 			return id;
 		} catch (error) {
-			const constraint = get(error, "cause.constraint") as string | undefined;
-
-			if (constraint === "resume_slug_user_id_unique") {
+			if (isResumeSlugUniqueViolation(error)) {
 				throw new ORPCError("RESUME_SLUG_ALREADY_EXISTS", { status: 400 });
 			}
 
@@ -315,7 +323,7 @@ export const resumeService = {
 
 			return resume;
 		} catch (error) {
-			if (get(error, "cause.constraint") === "resume_slug_user_id_unique") {
+			if (isResumeSlugUniqueViolation(error)) {
 				throw new ORPCError("RESUME_SLUG_ALREADY_EXISTS", { status: 400 });
 			}
 

@@ -1,258 +1,234 @@
-import * as pg from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import * as sqlite from "drizzle-orm/sqlite-core";
 import { defaultResumeData, type ResumeData } from "../../schema/resume/data";
 import { generateId } from "../../utils/string";
 
-export const user = pg.pgTable(
+const timestamp = () =>
+	sqlite
+		.integer({ mode: "timestamp" })
+		.notNull()
+		.default(sql`(unixepoch())`)
+		.$onUpdate(() => /* @__PURE__ */ new Date());
+
+export const user = sqlite.sqliteTable(
 	"user",
 	{
-		id: pg
-			.uuid("id")
+		id: sqlite
+			.text("id")
 			.notNull()
 			.primaryKey()
 			.$defaultFn(() => generateId()),
-		image: pg.text("image"),
-		name: pg.text("name").notNull(),
-		email: pg.text("email").notNull().unique(),
-		emailVerified: pg.boolean("email_verified").notNull().default(false),
-		username: pg.text("username").notNull().unique(),
-		displayUsername: pg.text("display_username").notNull().unique(),
-		twoFactorEnabled: pg.boolean("two_factor_enabled").notNull().default(false),
-		createdAt: pg.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-		updatedAt: pg
-			.timestamp("updated_at", { withTimezone: true })
-			.notNull()
-			.defaultNow()
-			.$onUpdate(() => /* @__PURE__ */ new Date()),
+		image: sqlite.text("image"),
+		name: sqlite.text("name").notNull(),
+		email: sqlite.text("email").notNull().unique(),
+		emailVerified: sqlite.integer("email_verified", { mode: "boolean" }).notNull().default(false),
+		username: sqlite.text("username").notNull().unique(),
+		displayUsername: sqlite.text("display_username").notNull().unique(),
+		twoFactorEnabled: sqlite.integer("two_factor_enabled", { mode: "boolean" }).notNull().default(false),
+		createdAt: sqlite.integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+		updatedAt: timestamp(),
 	},
-	(t) => [pg.index().on(t.createdAt.asc())],
+	(t) => [sqlite.index("user_created_at_index").on(t.createdAt)],
 );
 
-export const session = pg.pgTable(
+export const session = sqlite.sqliteTable(
 	"session",
 	{
-		id: pg
-			.uuid("id")
+		id: sqlite
+			.text("id")
 			.notNull()
 			.primaryKey()
 			.$defaultFn(() => generateId()),
-		token: pg.text("token").notNull().unique(),
-		ipAddress: pg.text("ip_address"),
-		userAgent: pg.text("user_agent"),
-		userId: pg
-			.uuid("user_id")
+		token: sqlite.text("token").notNull().unique(),
+		ipAddress: sqlite.text("ip_address"),
+		userAgent: sqlite.text("user_agent"),
+		userId: sqlite
+			.text("user_id")
 			.notNull()
 			.references(() => user.id, { onDelete: "cascade" }),
-		expiresAt: pg.timestamp("expires_at", { withTimezone: true }).notNull(),
-		createdAt: pg.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-		updatedAt: pg
-			.timestamp("updated_at", { withTimezone: true })
-			.notNull()
-			.defaultNow()
-			.$onUpdate(() => /* @__PURE__ */ new Date()),
+		expiresAt: sqlite.integer("expires_at", { mode: "timestamp" }).notNull(),
+		createdAt: sqlite.integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+		updatedAt: timestamp(),
 	},
-	(t) => [pg.index().on(t.token, t.userId), pg.index().on(t.expiresAt)],
+	(t) => [sqlite.index("session_token_user_id_index").on(t.token, t.userId), sqlite.index("session_expires_at_index").on(t.expiresAt)],
 );
 
-export const account = pg.pgTable(
+export const account = sqlite.sqliteTable(
 	"account",
 	{
-		id: pg
-			.uuid("id")
+		id: sqlite
+			.text("id")
 			.notNull()
 			.primaryKey()
 			.$defaultFn(() => generateId()),
-		accountId: pg.text("account_id").notNull(),
-		providerId: pg.text("provider_id").notNull().default("credential"),
-		userId: pg
-			.uuid("user_id")
+		accountId: sqlite.text("account_id").notNull(),
+		providerId: sqlite.text("provider_id").notNull().default("credential"),
+		userId: sqlite
+			.text("user_id")
 			.notNull()
 			.references(() => user.id, { onDelete: "cascade" }),
-		scope: pg.text("scope"),
-		idToken: pg.text("id_token"),
-		password: pg.text("password"),
-		accessToken: pg.text("access_token"),
-		refreshToken: pg.text("refresh_token"),
-		accessTokenExpiresAt: pg.timestamp("access_token_expires_at", { withTimezone: true }),
-		refreshTokenExpiresAt: pg.timestamp("refresh_token_expires_at", { withTimezone: true }),
-		createdAt: pg.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-		updatedAt: pg
-			.timestamp("updated_at", { withTimezone: true })
-			.notNull()
-			.defaultNow()
-			.$onUpdate(() => /* @__PURE__ */ new Date()),
+		scope: sqlite.text("scope"),
+		idToken: sqlite.text("id_token"),
+		password: sqlite.text("password"),
+		accessToken: sqlite.text("access_token"),
+		refreshToken: sqlite.text("refresh_token"),
+		accessTokenExpiresAt: sqlite.integer("access_token_expires_at", { mode: "timestamp" }),
+		refreshTokenExpiresAt: sqlite.integer("refresh_token_expires_at", { mode: "timestamp" }),
+		createdAt: sqlite.integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+		updatedAt: timestamp(),
 	},
-	(t) => [pg.index().on(t.userId)],
+	(t) => [sqlite.index("account_user_id_index").on(t.userId)],
 );
 
-export const verification = pg.pgTable("verification", {
-	id: pg
-		.uuid("id")
+export const verification = sqlite.sqliteTable("verification", {
+	id: sqlite
+		.text("id")
 		.notNull()
 		.primaryKey()
 		.$defaultFn(() => generateId()),
-	identifier: pg.text("identifier").notNull().unique(),
-	value: pg.text("value").notNull(),
-	expiresAt: pg.timestamp("expires_at", { withTimezone: true }).notNull(),
-	createdAt: pg.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-	updatedAt: pg
-		.timestamp("updated_at", { withTimezone: true })
-		.notNull()
-		.defaultNow()
-		.$onUpdate(() => /* @__PURE__ */ new Date()),
+	identifier: sqlite.text("identifier").notNull().unique(),
+	value: sqlite.text("value").notNull(),
+	expiresAt: sqlite.integer("expires_at", { mode: "timestamp" }).notNull(),
+	createdAt: sqlite.integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+	updatedAt: timestamp(),
 });
 
-export const twoFactor = pg.pgTable(
+export const twoFactor = sqlite.sqliteTable(
 	"two_factor",
 	{
-		id: pg
-			.uuid("id")
+		id: sqlite
+			.text("id")
 			.notNull()
 			.primaryKey()
 			.$defaultFn(() => generateId()),
-		userId: pg
-			.uuid("user_id")
+		userId: sqlite
+			.text("user_id")
 			.notNull()
 			.references(() => user.id, { onDelete: "cascade" }),
-		secret: pg.text("secret"),
-		backupCodes: pg.text("backup_codes"),
-		createdAt: pg.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-		updatedAt: pg
-			.timestamp("updated_at", { withTimezone: true })
-			.notNull()
-			.defaultNow()
-			.$onUpdate(() => /* @__PURE__ */ new Date()),
+		secret: sqlite.text("secret"),
+		backupCodes: sqlite.text("backup_codes"),
+		createdAt: sqlite.integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+		updatedAt: timestamp(),
 	},
-	(t) => [pg.index().on(t.userId), pg.index().on(t.secret)],
+	(t) => [sqlite.index("two_factor_user_id_index").on(t.userId), sqlite.index("two_factor_secret_index").on(t.secret)],
 );
 
-export const passkey = pg.pgTable(
+export const passkey = sqlite.sqliteTable(
 	"passkey",
 	{
-		id: pg
-			.uuid("id")
+		id: sqlite
+			.text("id")
 			.notNull()
 			.primaryKey()
 			.$defaultFn(() => generateId()),
-		name: pg.text("name"),
-		aaguid: pg.text("aaguid"),
-		publicKey: pg.text("public_key").notNull(),
-		credentialID: pg.text("credential_id").notNull(),
-		counter: pg.integer("counter").notNull(),
-		deviceType: pg.text("device_type").notNull(),
-		backedUp: pg.boolean("backed_up").notNull().default(false),
-		transports: pg.text("transports").notNull(),
-		userId: pg
-			.uuid("user_id")
+		name: sqlite.text("name"),
+		aaguid: sqlite.text("aaguid"),
+		publicKey: sqlite.text("public_key").notNull(),
+		credentialID: sqlite.text("credential_id").notNull(),
+		counter: sqlite.integer("counter").notNull(),
+		deviceType: sqlite.text("device_type").notNull(),
+		backedUp: sqlite.integer("backed_up", { mode: "boolean" }).notNull().default(false),
+		transports: sqlite.text("transports").notNull(),
+		userId: sqlite
+			.text("user_id")
 			.notNull()
 			.references(() => user.id, { onDelete: "cascade" }),
-		createdAt: pg.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-		updatedAt: pg
-			.timestamp("updated_at", { withTimezone: true })
-			.notNull()
-			.defaultNow()
-			.$onUpdate(() => /* @__PURE__ */ new Date()),
+		createdAt: sqlite.integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+		updatedAt: timestamp(),
 	},
-	(t) => [pg.index().on(t.userId)],
+	(t) => [sqlite.index("passkey_user_id_index").on(t.userId)],
 );
 
-export const resume = pg.pgTable(
+export const resume = sqlite.sqliteTable(
 	"resume",
 	{
-		id: pg
-			.uuid("id")
+		id: sqlite
+			.text("id")
 			.notNull()
 			.primaryKey()
 			.$defaultFn(() => generateId()),
-		name: pg.text("name").notNull(),
-		slug: pg.text("slug").notNull(),
-		tags: pg.text("tags").array().notNull().default([]),
-		isPublic: pg.boolean("is_public").notNull().default(false),
-		isLocked: pg.boolean("is_locked").notNull().default(false),
-		password: pg.text("password"),
-		data: pg
-			.jsonb("data")
+		name: sqlite.text("name").notNull(),
+		slug: sqlite.text("slug").notNull(),
+		tags: sqlite.text("tags", { mode: "json" }).$type<string[]>().notNull().$defaultFn(() => []),
+		isPublic: sqlite.integer("is_public", { mode: "boolean" }).notNull().default(false),
+		isLocked: sqlite.integer("is_locked", { mode: "boolean" }).notNull().default(false),
+		password: sqlite.text("password"),
+		data: sqlite
+			.text("data", { mode: "json" })
 			.notNull()
 			.$type<ResumeData>()
 			.$defaultFn(() => defaultResumeData),
-		userId: pg
-			.uuid("user_id")
+		userId: sqlite
+			.text("user_id")
 			.notNull()
 			.references(() => user.id, { onDelete: "cascade" }),
-		createdAt: pg.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-		updatedAt: pg
-			.timestamp("updated_at", { withTimezone: true })
-			.notNull()
-			.defaultNow()
-			.$onUpdate(() => /* @__PURE__ */ new Date()),
+		createdAt: sqlite.integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+		updatedAt: timestamp(),
 	},
 	(t) => [
-		pg.unique().on(t.slug, t.userId),
-		pg.index().on(t.userId),
-		pg.index().on(t.createdAt.asc()),
-		pg.index().on(t.userId, t.updatedAt.desc()),
-		pg.index().on(t.isPublic, t.slug, t.userId),
+		sqlite.unique("resume_slug_user_id_unique").on(t.slug, t.userId),
+		sqlite.index("resume_user_id_index").on(t.userId),
+		sqlite.index("resume_created_at_index").on(t.createdAt),
+		sqlite.index("resume_user_id_updated_at_index").on(t.userId, t.updatedAt),
+		sqlite.index("resume_is_public_slug_user_id_index").on(t.isPublic, t.slug, t.userId),
 	],
 );
 
-export const resumeStatistics = pg.pgTable("resume_statistics", {
-	id: pg
-		.uuid("id")
+export const resumeStatistics = sqlite.sqliteTable("resume_statistics", {
+	id: sqlite
+		.text("id")
 		.notNull()
 		.primaryKey()
 		.$defaultFn(() => generateId()),
-	views: pg.integer("views").notNull().default(0),
-	downloads: pg.integer("downloads").notNull().default(0),
-	lastViewedAt: pg.timestamp("last_viewed_at", { withTimezone: true }),
-	lastDownloadedAt: pg.timestamp("last_downloaded_at", { withTimezone: true }),
-	resumeId: pg
-		.uuid("resume_id")
+	views: sqlite.integer("views").notNull().default(0),
+	downloads: sqlite.integer("downloads").notNull().default(0),
+	lastViewedAt: sqlite.integer("last_viewed_at", { mode: "timestamp" }),
+	lastDownloadedAt: sqlite.integer("last_downloaded_at", { mode: "timestamp" }),
+	resumeId: sqlite
+		.text("resume_id")
 		.unique()
 		.notNull()
 		.references(() => resume.id, { onDelete: "cascade" }),
-	createdAt: pg.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-	updatedAt: pg
-		.timestamp("updated_at", { withTimezone: true })
-		.notNull()
-		.defaultNow()
-		.$onUpdate(() => /* @__PURE__ */ new Date()),
+	createdAt: sqlite.integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+	updatedAt: timestamp(),
 });
 
-export const apikey = pg.pgTable(
+export const apikey = sqlite.sqliteTable(
 	"apikey",
 	{
-		id: pg
-			.uuid("id")
+		id: sqlite
+			.text("id")
 			.notNull()
 			.primaryKey()
 			.$defaultFn(() => generateId()),
-		name: pg.text("name"),
-		start: pg.text("start"),
-		prefix: pg.text("prefix"),
-		key: pg.text("key").notNull(),
-		configId: pg.text("config_id").notNull().default("default"),
-		referenceId: pg
-			.uuid("reference_id")
+		name: sqlite.text("name"),
+		start: sqlite.text("start"),
+		prefix: sqlite.text("prefix"),
+		key: sqlite.text("key").notNull(),
+		configId: sqlite.text("config_id").notNull().default("default"),
+		referenceId: sqlite
+			.text("reference_id")
 			.notNull()
 			.references(() => user.id, { onDelete: "cascade" }),
-		refillInterval: pg.integer("refill_interval"),
-		refillAmount: pg.integer("refill_amount"),
-		lastRefillAt: pg.timestamp("last_refill_at", { withTimezone: true }),
-		enabled: pg.boolean("enabled").notNull().default(true),
-		rateLimitEnabled: pg.boolean("rate_limit_enabled").notNull().default(false),
-		rateLimitTimeWindow: pg.integer("rate_limit_time_window"),
-		rateLimitMax: pg.integer("rate_limit_max"),
-		requestCount: pg.integer("request_count").notNull().default(0),
-		remaining: pg.integer("remaining"),
-		lastRequest: pg.timestamp("last_request", { withTimezone: true }),
-		expiresAt: pg.timestamp("expires_at", { withTimezone: true }),
-		createdAt: pg.timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-		updatedAt: pg
-			.timestamp("updated_at", { withTimezone: true })
-			.notNull()
-			.defaultNow()
-			.$onUpdate(() => /* @__PURE__ */ new Date()),
-		permissions: pg.text("permissions"),
-		metadata: pg.jsonb("metadata"),
+		refillInterval: sqlite.integer("refill_interval"),
+		refillAmount: sqlite.integer("refill_amount"),
+		lastRefillAt: sqlite.integer("last_refill_at", { mode: "timestamp" }),
+		enabled: sqlite.integer("enabled", { mode: "boolean" }).notNull().default(true),
+		rateLimitEnabled: sqlite.integer("rate_limit_enabled", { mode: "boolean" }).notNull().default(false),
+		rateLimitTimeWindow: sqlite.integer("rate_limit_time_window"),
+		rateLimitMax: sqlite.integer("rate_limit_max"),
+		requestCount: sqlite.integer("request_count").notNull().default(0),
+		remaining: sqlite.integer("remaining"),
+		lastRequest: sqlite.integer("last_request", { mode: "timestamp" }),
+		expiresAt: sqlite.integer("expires_at", { mode: "timestamp" }),
+		createdAt: sqlite.integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+		updatedAt: timestamp(),
+		permissions: sqlite.text("permissions"),
+		metadata: sqlite.text("metadata", { mode: "json" }),
 	},
-	(t) => [pg.index().on(t.referenceId), pg.index().on(t.key), pg.index().on(t.enabled, t.referenceId)],
+	(t) => [
+		sqlite.index("apikey_user_id_index").on(t.referenceId),
+		sqlite.index("apikey_key_index").on(t.key),
+		sqlite.index("apikey_enabled_user_id_index").on(t.enabled, t.referenceId),
+	],
 );
