@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { homedir, platform } from "node:os";
 import { dirname, extname, join } from "node:path";
 import {
 	DeleteObjectCommand,
@@ -51,6 +52,32 @@ const CONTENT_TYPE_MAP: Record<string, string> = {
 const DEFAULT_CONTENT_TYPE = "application/octet-stream";
 
 const IMAGE_MIME_TYPES = ["image/gif", "image/png", "image/jpeg", "image/webp"];
+const DESKTOP_APP_NAME = "Reactive Resume";
+
+function resolveDesktopAppSupportDirectory(): string {
+	if (env.DESKTOP_APP_SUPPORT_PATH) {
+		return env.DESKTOP_APP_SUPPORT_PATH;
+	}
+
+	const homeDirectory = homedir();
+
+	switch (platform()) {
+		case "darwin":
+			return join(homeDirectory, "Library", "Application Support", DESKTOP_APP_NAME);
+		case "win32":
+			return join(process.env.APPDATA ?? join(homeDirectory, "AppData", "Roaming"), DESKTOP_APP_NAME);
+		default:
+			return join(process.env.XDG_DATA_HOME ?? join(homeDirectory, ".local", "share"), "reactive-resume");
+	}
+}
+
+function resolveLocalStorageRootDirectory(): string {
+	if (env.DESKTOP_MODE) {
+		return resolveDesktopAppSupportDirectory();
+	}
+
+	return join(process.cwd(), "data");
+}
 
 // Key builders for different upload types
 function buildPictureKey(userId: string): string {
@@ -113,7 +140,7 @@ class LocalStorageService implements StorageService {
 	private rootDirectory: string;
 
 	constructor() {
-		this.rootDirectory = join(process.cwd(), "data");
+		this.rootDirectory = resolveLocalStorageRootDirectory();
 	}
 
 	async list(prefix: string): Promise<string[]> {
@@ -313,6 +340,10 @@ class S3StorageService implements StorageService {
 }
 
 function createStorageService(): StorageService {
+	if (env.DESKTOP_MODE) {
+		return new LocalStorageService();
+	}
+
 	if (env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY && env.S3_BUCKET) {
 		return new S3StorageService();
 	}
