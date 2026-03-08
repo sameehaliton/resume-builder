@@ -4,6 +4,7 @@ import { flagsRouter } from "./flags";
 import { packetRouter } from "./packet";
 import { printerRouter } from "./printer";
 import { resumeRouter } from "./resume";
+import { resumeosRouter } from "./resumeos";
 import { statisticsRouter } from "./statistics";
 import { storageRouter } from "./storage";
 
@@ -13,6 +14,7 @@ export default {
 	flags: flagsRouter,
 	packet: packetRouter,
 	resume: resumeRouter,
+	resumeos: resumeosRouter,
 	storage: storageRouter,
 	printer: printerRouter,
 	statistics: statisticsRouter,
