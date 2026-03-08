@@ -22,7 +22,9 @@
 		"db:pull": "drizzle-kit pull",
 		"db:push": "drizzle-kit push",
 		"db:studio": "drizzle-kit studio",
-		"desktop:build": "pnpm build && npm exec --yes --package=electron@35.0.1 --package=electron-builder@26.0.12 electron-builder --mac",
+		"desktop:build": "node scripts/desktop/build-macos.mjs",
+		"desktop:build:notarized": "node scripts/desktop/build-macos.mjs --signed --notarize",
+		"desktop:build:signed": "node scripts/desktop/build-macos.mjs --signed",
 		"desktop:dev": "node electron/dev.mjs",
 		"dev": "vite dev",
 		"preview": "vite preview",
@@ -146,6 +148,7 @@
 	"build": {
 		"appId": "me.rxresu.desktop",
 		"productName": "Reactive Resume",
+		"artifactName": "${productName}-${version}-${arch}.${ext}",
 		"directories": {
 			"output": "dist-desktop"
 		},
@@ -156,10 +159,17 @@
 		],
 		"mac": {
 			"category": "public.app-category.productivity",
+			"hardenedRuntime": true,
+			"gatekeeperAssess": false,
+			"entitlements": "electron/entitlements.mac.plist",
+			"entitlementsInherit": "electron/entitlements.mac.plist",
 			"target": [
 				"dmg",
 				"zip"
 			]
+		},
+		"dmg": {
+			"writeUpdateInfo": false
 		}
 	},
 	"pnpm": {
