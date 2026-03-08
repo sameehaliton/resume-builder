@@ -1,0 +1,61 @@
+name: Desktop macOS Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      sign_and_notarize:
+        description: "Enable Apple code signing and notarization"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  desktop-macos:
+    runs-on: macos-14
+    timeout-minutes: 60
+    env:
+      CI: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build unsigned DMG
+        if: ${{ !inputs.sign_and_notarize }}
+        run: pnpm desktop:build
+
+      - name: Build signed + notarized DMG
+        if: ${{ inputs.sign_and_notarize }}
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: pnpm desktop:build:notarized
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-macos-${{ github.run_number }}
+          if-no-files-found: error
+          path: |
+            dist-desktop/*.dmg
+            dist-desktop/*.zip
