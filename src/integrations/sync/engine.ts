@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { asc, eq, sql } from "drizzle-orm";
 import { schema } from "@/integrations/drizzle";
@@ -56,6 +56,8 @@ type SyncedPacketRecord = {
 type SyncCollectionResult = {
 	count: number;
 	filesWritten: number;
+	conflictsDetected: number;
+	conflictCopiesCreated: number;
 };
 
 export interface ArtifactSyncResult {
@@ -64,6 +66,15 @@ export interface ArtifactSyncResult {
 	artifacts: SyncCollectionResult;
 	snapshots: SyncCollectionResult;
 	packets: SyncCollectionResult;
+	conflicts: {
+		totalDetected: number;
+		totalCopiesCreated: number;
+		byCollection: {
+			artifacts: number;
+			snapshots: number;
+			packets: number;
+		};
+	};
 	excludedDbPatterns: string[];
 }
 
@@ -74,8 +85,52 @@ interface SyncCollectionInput<T extends { id: string }> {
 	records: T[];
 }
 
+type SyncIndexRecord = {
+	id: string;
+	hash: string;
+};
+
+type SyncConflictRecord = {
+	id: string;
+	file: string;
+	conflictCopy: string;
+	reason: "hash-mismatch" | "timestamp-newer" | "hash-and-timestamp";
+};
+
+type SyncIndexPayload = {
+	collection: "artifacts" | "snapshots" | "packets";
+	generatedAt: string;
+	count: number;
+	records: SyncIndexRecord[];
+	conflicts?: SyncConflictRecord[];
+};
+
+type ParsedSyncIndex = {
+	generatedAt: Date | null;
+	recordHashes: Map<string, string>;
+};
+
+type ExistingRecordState = {
+	exists: boolean;
+	hash: string | null;
+	modifiedAt: Date | null;
+};
+
 function isExplicitlyExcludedDatabaseFile(filename: string): boolean {
 	return SQLITE_FILE_EXCLUSION_REGEXES.some((pattern) => pattern.test(filename));
+}
+
+function isMissingFileError(error: unknown): boolean {
+	if (typeof error !== "object" || error === null) return false;
+	return "code" in error && error.code === "ENOENT";
+}
+
+function isConflictCopyFile(filename: string): boolean {
+	return /\.conflict-[^.]+(?:-\d+)?\.json$/i.test(filename);
+}
+
+function sanitizeTimestampForFilename(timestamp: string): string {
+	return timestamp.replaceAll(":", "-").replaceAll(".", "-");
 }
 
 function hashRecord(value: unknown): string {
@@ -89,6 +144,110 @@ async function writeJsonAtomic(filePath: string, payload: unknown): Promise<void
 
 	await writeFile(tempPath, contents, "utf8");
 	await rename(tempPath, filePath);
+}
+
+function parseSyncIndex(raw: string): ParsedSyncIndex {
+	const parsed = JSON.parse(raw) as {
+		generatedAt?: unknown;
+		records?: unknown;
+	};
+
+	const generatedAt =
+		typeof parsed.generatedAt === "string" && !Number.isNaN(Date.parse(parsed.generatedAt))
+			? new Date(parsed.generatedAt)
+			: null;
+
+	const recordHashes = new Map<string, string>();
+
+	if (Array.isArray(parsed.records)) {
+		for (const entry of parsed.records) {
+			if (typeof entry !== "object" || entry === null) continue;
+
+			const id = "id" in entry ? entry.id : null;
+			const hash = "hash" in entry ? entry.hash : null;
+
+			if (typeof id === "string" && typeof hash === "string") {
+				recordHashes.set(id, hash);
+			}
+		}
+	}
+
+	return { generatedAt, recordHashes };
+}
+
+async function readExistingSyncIndex(directory: string): Promise<ParsedSyncIndex> {
+	const indexPath = join(directory, "index.json");
+
+	try {
+		const content = await readFile(indexPath, "utf8");
+		return parseSyncIndex(content);
+	} catch (error) {
+		if (isMissingFileError(error)) {
+			return { generatedAt: null, recordHashes: new Map() };
+		}
+
+		return { generatedAt: null, recordHashes: new Map() };
+	}
+}
+
+async function readExistingRecordState(filePath: string): Promise<ExistingRecordState> {
+	let fileStats;
+	try {
+		fileStats = await stat(filePath);
+	} catch (error) {
+		if (isMissingFileError(error)) {
+			return { exists: false, hash: null, modifiedAt: null };
+		}
+
+		throw error;
+	}
+
+	if (!fileStats.isFile()) {
+		return { exists: false, hash: null, modifiedAt: null };
+	}
+
+	const content = await readFile(filePath, "utf8");
+
+	try {
+		const parsed = JSON.parse(content);
+		return {
+			exists: true,
+			hash: hashRecord(parsed),
+			modifiedAt: fileStats.mtime,
+		};
+	} catch {
+		return {
+			exists: true,
+			hash: null,
+			modifiedAt: fileStats.mtime,
+		};
+	}
+}
+
+async function getUniqueConflictCopyPath(filePath: string, generatedAt: string): Promise<string> {
+	const extension = extname(filePath) || ".json";
+	const filePathWithoutExtension = extension.length > 0 ? filePath.slice(0, -extension.length) : filePath;
+	const timestamp = sanitizeTimestampForFilename(generatedAt);
+
+	let attempt = 0;
+	while (true) {
+		const suffix = attempt === 0 ? "" : `-${attempt}`;
+		const candidatePath = `${filePathWithoutExtension}.conflict-${timestamp}${suffix}${extension}`;
+
+		try {
+			await access(candidatePath);
+			attempt += 1;
+		} catch (error) {
+			if (isMissingFileError(error)) return candidatePath;
+			throw error;
+		}
+	}
+}
+
+function getConflictReason(input: { hashSignal: boolean; timestampSignal: boolean }): SyncConflictRecord["reason"] {
+	if (input.hashSignal && input.timestampSignal) return "hash-and-timestamp";
+	if (input.timestampSignal) return "timestamp-newer";
+	return "hash-mismatch";
 }
 
 async function ensurePacketLifecycleTablesForSync() {
@@ -140,6 +299,7 @@ async function ensurePacketLifecycleTablesForSync() {
 
 async function syncCollection<T extends { id: string }>(input: SyncCollectionInput<T>): Promise<SyncCollectionResult> {
 	await mkdir(input.directory, { recursive: true });
+	const existingSyncIndex = await readExistingSyncIndex(input.directory);
 
 	const filesToKeep = new Set(input.records.map((record) => `${record.id}.json`));
 	filesToKeep.add("index.json");
@@ -151,6 +311,7 @@ async function syncCollection<T extends { id: string }>(input: SyncCollectionInp
 
 			// Never touch SQLite database files, even if they appear in a sync directory.
 			if (isExplicitlyExcludedDatabaseFile(entry.name)) return;
+			if (isConflictCopyFile(entry.name)) return;
 
 			if (extname(entry.name).toLowerCase() !== ".json") return;
 			if (filesToKeep.has(entry.name)) return;
@@ -159,26 +320,57 @@ async function syncCollection<T extends { id: string }>(input: SyncCollectionInp
 		}),
 	);
 
-	await Promise.all(
-		input.records.map(async (record) => {
-			const filePath = join(input.directory, `${record.id}.json`);
-			await writeJsonAtomic(filePath, record);
-		}),
-	);
+	const conflictRecords: SyncConflictRecord[] = [];
+	const indexRecords: SyncIndexRecord[] = [];
 
-	await writeJsonAtomic(join(input.directory, "index.json"), {
+	for (const record of input.records) {
+		const filePath = join(input.directory, `${record.id}.json`);
+		const incomingHash = hashRecord(record);
+		indexRecords.push({ id: record.id, hash: incomingHash });
+
+		const existingRecord = await readExistingRecordState(filePath);
+		if (existingRecord.exists && existingRecord.hash !== incomingHash) {
+			const previousIndexHash = existingSyncIndex.recordHashes.get(record.id) ?? null;
+			const hashSignal = previousIndexHash === null || existingRecord.hash === null || existingRecord.hash !== previousIndexHash;
+			const timestampSignal =
+				existingRecord.modifiedAt !== null &&
+				existingSyncIndex.generatedAt !== null &&
+				existingRecord.modifiedAt.getTime() > existingSyncIndex.generatedAt.getTime();
+
+			if (hashSignal || timestampSignal) {
+				const conflictCopyPath = await getUniqueConflictCopyPath(filePath, input.generatedAt);
+				await rename(filePath, conflictCopyPath);
+
+				conflictRecords.push({
+					id: record.id,
+					file: filePath,
+					conflictCopy: conflictCopyPath,
+					reason: getConflictReason({ hashSignal, timestampSignal }),
+				});
+			}
+		}
+
+		await writeJsonAtomic(filePath, record);
+	}
+
+	const indexPayload: SyncIndexPayload = {
 		collection: input.collectionName,
 		generatedAt: input.generatedAt,
 		count: input.records.length,
-		records: input.records.map((record) => ({
-			id: record.id,
-			hash: hashRecord(record),
-		})),
-	});
+		records: indexRecords,
+	};
+
+	if (conflictRecords.length > 0) {
+		indexPayload.conflicts = conflictRecords;
+	}
+
+	await writeJsonAtomic(join(input.directory, "index.json"), indexPayload);
 
 	return {
 		count: input.records.length,
 		filesWritten: input.records.length + 1,
+		conflictsDetected: conflictRecords.length,
+		conflictCopiesCreated: conflictRecords.length,
 	};
 }
 
@@ -297,6 +489,19 @@ export async function syncUserArtifactsToDirectory(input: {
 		artifacts: artifactResult,
 		snapshots: snapshotResult,
 		packets: packetResult,
+		conflicts: {
+			totalDetected:
+				artifactResult.conflictsDetected + snapshotResult.conflictsDetected + packetResult.conflictsDetected,
+			totalCopiesCreated:
+				artifactResult.conflictCopiesCreated +
+				snapshotResult.conflictCopiesCreated +
+				packetResult.conflictCopiesCreated,
+			byCollection: {
+				artifacts: artifactResult.conflictsDetected,
+				snapshots: snapshotResult.conflictsDetected,
+				packets: packetResult.conflictsDetected,
+			},
+		},
 		excludedDbPatterns: [...SQLITE_FILE_EXCLUSION_PATTERNS],
 	};
 }
