@@ -7,6 +7,7 @@ import { resumeRouter } from "./resume";
 import { resumeosRouter } from "./resumeos";
 import { statisticsRouter } from "./statistics";
 import { storageRouter } from "./storage";
+import { syncRouter } from "./sync";
 import { syncSettingsRouter } from "./sync-settings";
 
 export default {
@@ -17,6 +18,7 @@ export default {
 	resume: resumeRouter,
 	resumeos: resumeosRouter,
 	storage: storageRouter,
+	sync: syncRouter,
 	syncSettings: syncSettingsRouter,
 	printer: printerRouter,
 	statistics: statisticsRouter,

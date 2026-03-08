@@ -7,6 +7,8 @@ import { eq, sql } from "drizzle-orm";
 import * as sqlite from "drizzle-orm/sqlite-core";
 import { schema } from "@/integrations/drizzle";
 import { db } from "@/integrations/drizzle/client";
+import { syncUserArtifactsToDirectory } from "@/integrations/sync/engine";
+import { logger } from "@/utils/logger";
 
 const timestamp = () =>
 	sqlite
@@ -154,6 +156,19 @@ export const syncSettingsService = {
 					updatedAt: new Date(),
 				},
 			});
+
+		try {
+			await syncUserArtifactsToDirectory({
+				userId: input.userId,
+				syncDirectory: normalizedPath,
+			});
+		} catch (error) {
+			logger.error("Failed to run artifact sync after sync directory update.", {
+				userId: input.userId,
+				syncDirectory: normalizedPath,
+				error,
+			});
+		}
 
 		return normalizedPath;
 	},
