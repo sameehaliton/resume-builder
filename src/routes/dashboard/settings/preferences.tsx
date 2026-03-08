@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { LocaleCombobox } from "@/components/locale/combobox";
 import { ThemeCombobox } from "@/components/theme/combobox";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,7 +47,9 @@ function RouteComponent() {
 			{
 				onSuccess: ({ syncDirectory: savedSyncDirectory }) => {
 					setSyncDirectory(savedSyncDirectory);
-					toast.success(t`Your sync folder has been updated.`, { id: toastId });
+					toast.success(t`Your sync folder has been updated. Conflicting local files are preserved as .conflict copies.`, {
+						id: toastId,
+					});
 				},
 				onError: (error) => {
 					toast.error(error.message, { id: toastId });
@@ -113,6 +116,22 @@ function RouteComponent() {
 							Enter an absolute folder path. The path is validated, created if missing, and must be writable.
 						</Trans>
 					</p>
+					<Alert>
+						<AlertTitle>
+							<Trans>Conflict handling</Trans>
+						</AlertTitle>
+						<AlertDescription className="space-y-1">
+							<p>
+								<Trans>Sync uses both content hashes and file timestamps to detect local edits.</Trans>
+							</p>
+							<p>
+								<Trans>When a conflict is detected, the local file is kept as a copy before the latest app record is written.</Trans>
+							</p>
+							<p>
+								<code>&lt;id&gt;.conflict-&lt;timestamp&gt;.json</code>
+							</p>
+						</AlertDescription>
+					</Alert>
 
 					<div className="flex justify-end">
 						<Button
