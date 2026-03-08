@@ -1,11 +1,12 @@
 import { t } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
-import { CircleNotchIcon, FileJsIcon, FilePdfIcon } from "@phosphor-icons/react";
+import { CircleNotchIcon, FileJsIcon, FilePdfIcon, FileTextIcon } from "@phosphor-icons/react";
 import { useMutation } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { toast } from "sonner";
 import { useResumeStore } from "@/components/resume/store/resume";
 import { Button } from "@/components/ui/button";
+import { RenderCVExporter } from "@/integrations/export";
 import { orpc } from "@/integrations/orpc/client";
 import { downloadFromUrl, downloadWithAnchor, generateFilename } from "@/utils/file";
 import { SectionBase } from "../shared/section-base";
@@ -23,6 +24,16 @@ export function ExportSectionBuilder() {
 		const blob = new Blob([jsonString], { type: "application/json" });
 
 		downloadWithAnchor(blob, filename);
+	}, [resume]);
+
+	const onDownloadRenderCVYAML = useCallback(() => {
+		const exporter = new RenderCVExporter();
+		const filename = generateFilename(resume.data.basics.name, "rendercv.yaml");
+		const yaml = exporter.parse(resume.data);
+		const blob = new Blob([yaml], { type: "application/yaml" });
+
+		downloadWithAnchor(blob, filename);
+		toast.success(t`RenderCV YAML downloaded. Next step: run rendercv render ${filename} in your terminal.`);
 	}, [resume]);
 
 	const onDownloadPDF = useCallback(async () => {
@@ -55,6 +66,23 @@ export function ExportSectionBuilder() {
 						<Trans>
 							Download a copy of your resume in JSON format. Use this file for backup or to import your resume into
 							other applications, including AI assistants.
+						</Trans>
+					</p>
+				</div>
+			</Button>
+
+			<Button
+				variant="outline"
+				onClick={onDownloadRenderCVYAML}
+				className="h-auto gap-x-4 whitespace-normal p-4! text-start font-normal active:scale-98"
+			>
+				<FileTextIcon className="size-6 shrink-0" />
+				<div className="flex flex-1 flex-col gap-y-1">
+					<h6 className="font-medium">RenderCV YAML</h6>
+					<p className="text-muted-foreground text-xs leading-normal">
+						<Trans>
+							Download a RenderCV-compatible YAML file. Then run rendercv render filename.rendercv.yaml in your
+							terminal to compile it.
 						</Trans>
 					</p>
 				</div>
