@@ -18,6 +18,7 @@ import { ExportSectionBuilder } from "./sections/export";
 import { InformationSectionBuilder } from "./sections/information";
 import { LayoutSectionBuilder } from "./sections/layout";
 import { NotesSectionBuilder } from "./sections/notes";
+import { OptimizationSectionBuilder } from "./sections/optimization";
 import { PageSectionBuilder } from "./sections/page";
 import { SharingSectionBuilder } from "./sections/sharing";
 import { StatisticsSectionBuilder } from "./sections/statistics";
@@ -35,6 +36,7 @@ function getSectionComponent(type: RightSidebarSection) {
 		.with("notes", () => <NotesSectionBuilder />)
 		.with("sharing", () => <SharingSectionBuilder />)
 		.with("statistics", () => <StatisticsSectionBuilder />)
+		.with("optimization", () => <OptimizationSectionBuilder />)
 		.with("export", () => <ExportSectionBuilder />)
 		.with("information", () => <InformationSectionBuilder />)
 		.exhaustive();

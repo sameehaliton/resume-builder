@@ -18,6 +18,7 @@ import {
 	ImageIcon,
 	InfoIcon,
 	LayoutIcon,
+	MagicWandIcon,
 	MessengerLogoIcon,
 	NotepadIcon,
 	PaletteIcon,
@@ -49,6 +50,7 @@ export type RightSidebarSection =
 	| "notes"
 	| "sharing"
 	| "statistics"
+	| "optimization"
 	| "export"
 	| "information";
 
@@ -83,6 +85,7 @@ export const rightSidebarSections: RightSidebarSection[] = [
 	"notes",
 	"sharing",
 	"statistics",
+	"optimization",
 	"export",
 	"information",
 ] as const;
@@ -121,6 +124,7 @@ export const getSectionTitle = (type: SidebarSection | CustomOnlyType): string =
 			.with("notes", () => t`Notes`)
 			.with("sharing", () => t`Sharing`)
 			.with("statistics", () => t`Statistics`)
+			.with("optimization", () => t`Optimization`)
 			.with("export", () => t`Export`)
 			.with("information", () => t`Information`)
 
@@ -164,6 +168,7 @@ export const getSectionIcon = (type: SidebarSection | CustomOnlyType, props?: Ic
 			.with("notes", () => <NotepadIcon {...iconProps} />)
 			.with("sharing", () => <ShareFatIcon {...iconProps} />)
 			.with("statistics", () => <ChartLineIcon {...iconProps} />)
+			.with("optimization", () => <MagicWandIcon {...iconProps} />)
 			.with("export", () => <DownloadIcon {...iconProps} />)
 			.with("information", () => <InfoIcon {...iconProps} />)
 
