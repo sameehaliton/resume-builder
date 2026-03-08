@@ -1,6 +1,33 @@
 import z from "zod";
+import { atsReportSchema } from "@/integrations/resumeos";
+import { resumeDataSchema } from "@/schema/resume/data";
 import { protectedProcedure } from "../context";
 import { resumeosService } from "../services/resumeos";
+
+const atsReportRecordSchema = z.object({
+	id: z.string(),
+	resumeId: z.string(),
+	jobDescription: z.string().nullable(),
+	report: atsReportSchema,
+	createdAt: z.date(),
+	updatedAt: z.date(),
+});
+
+const runAtsInputSchema = z.object({
+	resumeId: z.string().describe("The unique identifier of the resume to score."),
+	jobDescription: z
+		.string()
+		.trim()
+		.max(20_000)
+		.optional()
+		.describe("Optional job description text to evaluate keyword coverage against."),
+	keywords: z
+		.array(z.string().trim().min(1).max(64))
+		.max(40)
+		.optional()
+		.describe("Optional list of target keywords to score against."),
+	threshold: z.number().int().min(0).max(100).optional().describe("Optional ATS pass threshold from 0 to 100."),
+});
 
 const qualityFindingSchema = z.object({
 	severity: z.enum(["info", "warn", "error"]),
@@ -56,7 +83,76 @@ const qualityScoreResultSchema = z.object({
 	provider: z.literal("local-rule-engine"),
 });
 
+const tailorAnalysisSchema = z.object({
+	roleSummary: z.string(),
+	requiredSkills: z.array(z.string()),
+	preferredSkills: z.array(z.string()),
+	keywords: z.array(z.string()),
+});
+
+const tailorChangeSchema = z.object({
+	path: z.string(),
+	reason: z.string(),
+	before: z.string(),
+	after: z.string(),
+});
+
+const tailorResultSchema = z.object({
+	resumeId: z.string(),
+	generatedAt: z.date(),
+	analysis: tailorAnalysisSchema,
+	keywordsUsed: z.array(z.string()),
+	changes: z.array(tailorChangeSchema),
+	warnings: z.array(z.string()),
+	tailoredData: resumeDataSchema,
+});
+
 export const resumeosRouter = {
+	ats: {
+		evaluate: protectedProcedure
+			.route({
+				method: "POST",
+				path: "/resumeos/ats",
+				tags: ["ResumeOS ATS"],
+				operationId: "evaluateResumeAts",
+				summary: "Evaluate ATS score for a resume",
+				description:
+					"Runs ATS scoring against the latest resume data, returns a structured report, and persists the report locally for the authenticated user.",
+				successDescription: "The persisted ATS scoring report for the resume.",
+			})
+			.input(runAtsInputSchema)
+			.output(atsReportRecordSchema)
+			.handler(async ({ context, input }) => {
+				return resumeosService.ats.evaluate({
+					userId: context.user.id,
+					resumeId: input.resumeId,
+					jobDescription: input.jobDescription,
+					keywords: input.keywords,
+					threshold: input.threshold,
+				});
+			}),
+
+		getLatestByResumeId: protectedProcedure
+			.route({
+				method: "GET",
+				path: "/resumeos/ats/{resumeId}",
+				tags: ["ResumeOS ATS"],
+				operationId: "getLatestResumeAtsReport",
+				summary: "Get latest ATS report for a resume",
+				description:
+					"Returns the latest locally persisted ATS report for the specified resume, or null if the resume has not been scored yet.",
+				successDescription: "The latest ATS report for the resume or null.",
+			})
+			.input(z.object({ resumeId: z.string().describe("The unique identifier of the resume.") }))
+			.output(atsReportRecordSchema.nullable())
+			.handler(async ({ context, input }) => {
+				return resumeosService.ats.getLatestByResumeId({
+					userId: context.user.id,
+					resumeId: input.resumeId,
+				});
+			}),
+	},
+
 	quality: {
 		score: protectedProcedure
 			.route({
@@ -97,80 +193,46 @@ export const resumeosRouter = {
 					"Returns the latest persisted quality score/report for the selected resume. Returns null when no report has been generated yet.",
 				successDescription: "The latest quality score/report, or null if none exists.",
 			})
-			.input(
-				z.object({
-					resumeId: z.string(),
-				}),
-			)
+			.input(z.object({ resumeId: z.string() }))
 			.output(qualityScoreResultSchema.nullable())
 			.handler(async ({ context, input }) => {
 				return resumeosService.quality.getLatest({
-import { atsReportSchema } from "@/integrations/resumeos";
-import { protectedProcedure } from "../context";
-import { resumeosService } from "../services/resumeos";
+					userId: context.user.id,
+					resumeId: input.resumeId,
+				});
+			}),
+	},
 
-const atsReportRecordSchema = z.object({
-	id: z.string(),
-	resumeId: z.string(),
-	jobDescription: z.string().nullable(),
-	report: atsReportSchema,
-	createdAt: z.date(),
-	updatedAt: z.date(),
-});
-
-const runAtsInputSchema = z.object({
-	resumeId: z.string().describe("The unique identifier of the resume to score."),
-	jobDescription: z.string().trim().max(20_000).optional().describe("Optional job description text to evaluate keyword coverage against."),
-	keywords: z
-		.array(z.string().trim().min(1).max(64))
-		.max(40)
-		.optional()
-		.describe("Optional list of target keywords to score against."),
-	threshold: z.number().int().min(0).max(100).optional().describe("Optional ATS pass threshold from 0 to 100."),
-});
-
-export const resumeosRouter = {
-	ats: {
-		evaluate: protectedProcedure
+	tailor: {
+		generate: protectedProcedure
 			.route({
 				method: "POST",
-				path: "/resumeos/ats",
-				tags: ["ResumeOS"],
-				operationId: "evaluateResumeAts",
-				summary: "Evaluate ATS score for a resume",
+				path: "/resumeos/tailor",
+				tags: ["ResumeOS Tailor"],
+				operationId: "generateTailoredResume",
+				summary: "Generate JD-tailored resume content",
 				description:
-					"Runs ATS scoring against the latest resume data, returns a structured report, and persists the report locally for the authenticated user.",
-				successDescription: "The persisted ATS scoring report for the resume.",
+					"Generates deterministic JD-tailored resume content from job description text and returns suggested changes plus tailored resume data.",
+				successDescription: "Tailoring analysis and updated resume data tailored to the provided job description.",
 			})
-			.input(runAtsInputSchema)
-			.output(atsReportRecordSchema)
+			.input(
+				z.object({
+					resumeId: z.string(),
+					jobDescription: z
+						.string()
+						.trim()
+						.min(40, "Please provide a fuller job description (at least 40 characters).")
+						.max(40_000),
+					maxKeywords: z.number().int().min(5).max(40).optional(),
+				}),
+			)
+			.output(tailorResultSchema)
 			.handler(async ({ context, input }) => {
-				return resumeosService.ats.evaluate({
+				return resumeosService.tailor.generate({
 					userId: context.user.id,
 					resumeId: input.resumeId,
 					jobDescription: input.jobDescription,
-					keywords: input.keywords,
-					threshold: input.threshold,
-				});
-			}),
-
-		getLatestByResumeId: protectedProcedure
-			.route({
-				method: "GET",
-				path: "/resumeos/ats/{resumeId}",
-				tags: ["ResumeOS"],
-				operationId: "getLatestResumeAtsReport",
-				summary: "Get latest ATS report for a resume",
-				description:
-					"Returns the latest locally persisted ATS report for the specified resume, or null if the resume has not been scored yet.",
-				successDescription: "The latest ATS report for the resume or null.",
-			})
-			.input(z.object({ resumeId: z.string().describe("The unique identifier of the resume.") }))
-			.output(atsReportRecordSchema.nullable())
-			.handler(async ({ context, input }) => {
-				return resumeosService.ats.getLatestByResumeId({
-					userId: context.user.id,
-					resumeId: input.resumeId,
+					maxKeywords: input.maxKeywords,
 				});
 			}),
 	},

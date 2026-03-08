@@ -1,112 +1,24 @@
 import { ORPCError } from "@orpc/client";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
+import * as sqlite from "drizzle-orm/sqlite-core";
+import type { ResumeData } from "@/schema/resume/data";
+import {
+	atsReportSchema,
+	evaluateAtsReport,
+	generateTailoredResume,
+	runQuality,
+	TailorGenerationError,
+	type AtsReport,
+	type BulletScore,
+	type QualityReport,
+	type TailorChange,
+	type TailorJDAnalysis,
+} from "@/integrations/resumeos";
 import { schema } from "@/integrations/drizzle";
 import { db } from "@/integrations/drizzle/client";
 import { JSONResumeExporter } from "@/integrations/export/json-resume";
-import { runQuality, type BulletScore, type QualityReport } from "@/integrations/resumeos/quality";
-import { getStorageService } from "./storage";
-
-type QualityProvider = "local-rule-engine";
-
-export interface QualityBulletReport {
-	bullets: BulletScore[];
-}
-
-export interface QualityScoreResult {
-	resumeId: string;
-	generatedAt: Date;
-	score: number;
-	bulletReport: QualityBulletReport;
-	report: QualityReport;
-	storageKey: string;
-	provider: QualityProvider;
-}
-
-interface PersistedQualityScoreResult
-	extends Omit<QualityScoreResult, "generatedAt"> {
-	generatedAt: string;
-}
-
-const jsonEncoder = new TextEncoder();
-const jsonDecoder = new TextDecoder();
-
-const buildQualityReportStorageKey = (userId: string, resumeId: string) =>
-	`resumeos/${userId}/quality/${resumeId}/latest.json`;
-
-const toPersistedPayload = (result: QualityScoreResult): PersistedQualityScoreResult => ({
-	...result,
-	generatedAt: result.generatedAt.toISOString(),
-});
-
-const fromPersistedPayload = (value: unknown): QualityScoreResult | null => {
-	if (!value || typeof value !== "object") return null;
-
-	const payload = value as Partial<PersistedQualityScoreResult>;
-	if (typeof payload.resumeId !== "string") return null;
-	if (typeof payload.generatedAt !== "string") return null;
-	if (typeof payload.score !== "number") return null;
-	if (typeof payload.storageKey !== "string") return null;
-	if (payload.provider !== "local-rule-engine") return null;
-	if (!payload.report || typeof payload.report !== "object") return null;
-
-	const generatedAt = new Date(payload.generatedAt);
-	if (Number.isNaN(generatedAt.getTime())) return null;
-
-	const report = payload.report as QualityReport;
-	const bulletScores = Array.isArray(report.bulletScores) ? report.bulletScores : [];
-
-	return {
-		resumeId: payload.resumeId,
-		generatedAt,
-		score: payload.score,
-		bulletReport: { bullets: bulletScores },
-		report,
-		storageKey: payload.storageKey,
-		provider: payload.provider,
-	};
-};
-
-const persistQualityScoreResult = async (input: { storageKey: string; result: QualityScoreResult }) => {
-	await getStorageService().write({
-		key: input.storageKey,
-		contentType: "application/json",
-		data: jsonEncoder.encode(JSON.stringify(toPersistedPayload(input.result), null, 2)),
-	});
-};
-
-const getPersistedQualityScoreResult = async (input: {
-	userId: string;
-	resumeId: string;
-}): Promise<QualityScoreResult | null> => {
-	const storageKey = buildQualityReportStorageKey(input.userId, input.resumeId);
-	const storageObject = await getStorageService().read(storageKey);
-	if (!storageObject) return null;
-
-	try {
-		const raw = jsonDecoder.decode(storageObject.data);
-		return fromPersistedPayload(JSON.parse(raw));
-	} catch {
-		return null;
-	}
-};
-
-const score = async (input: {
-	userId: string;
-	resumeId: string;
-	threshold?: number;
-	targetKeywords?: string[];
-}): Promise<QualityScoreResult> => {
-	const [resume] = await db
-		.select({
-			id: schema.resume.id,
-			data: schema.resume.data,
-		})
-import { and, desc, eq, sql } from "drizzle-orm";
-import * as sqlite from "drizzle-orm/sqlite-core";
-import { atsReportSchema, evaluateAtsReport, type AtsReport } from "@/integrations/resumeos";
-import { schema } from "@/integrations/drizzle";
-import { db } from "@/integrations/drizzle/client";
 import { generateId } from "@/utils/string";
+import { getStorageService } from "./storage";
 
 const timestamp = () =>
 	sqlite
@@ -115,6 +27,7 @@ const timestamp = () =>
 		.default(sql`(unixepoch())`)
 		.$onUpdate(() => /* @__PURE__ */ new Date());
 
+// ATS persistence
 const resumeAtsReport = sqlite.sqliteTable(
 	"resume_ats_report",
 	{
@@ -143,6 +56,15 @@ const resumeAtsReport = sqlite.sqliteTable(
 		sqlite.index("resume_ats_report_updated_at_index").on(table.updatedAt),
 	],
 );
+
+type PersistedAtsReport = {
+	id: string;
+	resumeId: string;
+	jobDescription: string | null;
+	report: AtsReport;
+	createdAt: Date;
+	updatedAt: Date;
+};
 
 let atsReportTableReady = false;
 
@@ -177,15 +99,6 @@ const ensureAtsReportTable = async () => {
 	atsReportTableReady = true;
 };
 
-type PersistedAtsReport = {
-	id: string;
-	resumeId: string;
-	jobDescription: string | null;
-	report: AtsReport;
-	createdAt: Date;
-	updatedAt: Date;
-};
-
 const toDate = (value: Date | number | string) => (value instanceof Date ? value : new Date(value));
 
 const parseStoredReport = (serializedReport: string): AtsReport => {
@@ -199,7 +112,7 @@ const parseStoredReport = (serializedReport: string): AtsReport => {
 	}
 };
 
-const mapPersistedReport = (record: {
+const mapPersistedAtsReport = (record: {
 	id: string;
 	resumeId: string;
 	jobDescription: string | null;
@@ -215,7 +128,10 @@ const mapPersistedReport = (record: {
 	updatedAt: toDate(record.updatedAt),
 });
 
-const getLatestByResumeId = async (input: { userId: string; resumeId: string }): Promise<PersistedAtsReport | null> => {
+const getLatestAtsByResumeId = async (input: {
+	userId: string;
+	resumeId: string;
+}): Promise<PersistedAtsReport | null> => {
 	await ensureAtsReportTable();
 
 	const [record] = await db
@@ -233,10 +149,10 @@ const getLatestByResumeId = async (input: { userId: string; resumeId: string }):
 		.limit(1);
 
 	if (!record) return null;
-	return mapPersistedReport(record);
+	return mapPersistedAtsReport(record);
 };
 
-const evaluate = async (input: {
+const evaluateAts = async (input: {
 	userId: string;
 	resumeId: string;
 	jobDescription?: string;
@@ -251,40 +167,12 @@ const evaluate = async (input: {
 		.where(and(eq(schema.resume.id, input.resumeId), eq(schema.resume.userId, input.userId)))
 		.limit(1);
 
-	if (!resume) throw new ORPCError("NOT_FOUND");
+	if (!resume) {
+		throw new ORPCError("NOT_FOUND", {
+			message: "Resume not found. Refresh and try again.",
+		});
+	}
 
-	const now = new Date();
-	const storageKey = buildQualityReportStorageKey(input.userId, input.resumeId);
-	const report = runQuality({
-		generationId: `quality_${resume.id}_${now.getTime()}`,
-		resume: new JSONResumeExporter().convert(resume.data),
-		threshold: input.threshold,
-		targetKeywords: input.targetKeywords,
-	});
-
-	const result: QualityScoreResult = {
-		resumeId: resume.id,
-		generatedAt: now,
-		score: report.score,
-		bulletReport: { bullets: report.bulletScores },
-		report,
-		storageKey,
-		provider: "local-rule-engine",
-	};
-
-	await persistQualityScoreResult({ storageKey, result });
-
-	return result;
-};
-
-const getLatest = async (input: { userId: string; resumeId: string }) => {
-	return getPersistedQualityScoreResult(input);
-};
-
-export const resumeosService = {
-	quality: {
-		score,
-		getLatest,
 	const normalizedJobDescription = input.jobDescription?.trim() || undefined;
 	const normalizedKeywords = (input.keywords ?? [])
 		.map((keyword) => keyword.trim())
@@ -324,7 +212,7 @@ export const resumeosService = {
 			},
 		});
 
-	const persisted = await getLatestByResumeId({ userId: input.userId, resumeId: input.resumeId });
+	const persisted = await getLatestAtsByResumeId({ userId: input.userId, resumeId: input.resumeId });
 	if (!persisted) {
 		throw new ORPCError("INTERNAL_SERVER_ERROR", {
 			message: "ATS report could not be persisted.",
@@ -334,9 +222,217 @@ export const resumeosService = {
 	return persisted;
 };
 
+// Quality persistence
+
+type QualityProvider = "local-rule-engine";
+
+export interface QualityBulletReport {
+	bullets: BulletScore[];
+}
+
+export interface QualityScoreResult {
+	resumeId: string;
+	generatedAt: Date;
+	score: number;
+	bulletReport: QualityBulletReport;
+	report: QualityReport;
+	storageKey: string;
+	provider: QualityProvider;
+}
+
+interface PersistedQualityScoreResult extends Omit<QualityScoreResult, "generatedAt"> {
+	generatedAt: string;
+}
+
+const jsonEncoder = new TextEncoder();
+const jsonDecoder = new TextDecoder();
+
+const buildQualityReportStorageKey = (userId: string, resumeId: string) =>
+	`resumeos/${userId}/quality/${resumeId}/latest.json`;
+
+const toPersistedQualityPayload = (result: QualityScoreResult): PersistedQualityScoreResult => ({
+	...result,
+	generatedAt: result.generatedAt.toISOString(),
+});
+
+const fromPersistedQualityPayload = (value: unknown): QualityScoreResult | null => {
+	if (!value || typeof value !== "object") return null;
+
+	const payload = value as Partial<PersistedQualityScoreResult>;
+	if (typeof payload.resumeId !== "string") return null;
+	if (typeof payload.generatedAt !== "string") return null;
+	if (typeof payload.score !== "number") return null;
+	if (typeof payload.storageKey !== "string") return null;
+	if (payload.provider !== "local-rule-engine") return null;
+	if (!payload.report || typeof payload.report !== "object") return null;
+
+	const generatedAt = new Date(payload.generatedAt);
+	if (Number.isNaN(generatedAt.getTime())) return null;
+
+	const report = payload.report as QualityReport;
+	const bulletScores = Array.isArray(report.bulletScores) ? report.bulletScores : [];
+
+	return {
+		resumeId: payload.resumeId,
+		generatedAt,
+		score: payload.score,
+		bulletReport: { bullets: bulletScores },
+		report,
+		storageKey: payload.storageKey,
+		provider: payload.provider,
+	};
+};
+
+const persistQualityScoreResult = async (input: { storageKey: string; result: QualityScoreResult }) => {
+	await getStorageService().write({
+		key: input.storageKey,
+		contentType: "application/json",
+		data: jsonEncoder.encode(JSON.stringify(toPersistedQualityPayload(input.result), null, 2)),
+	});
+};
+
+const getPersistedQualityScoreResult = async (input: {
+	userId: string;
+	resumeId: string;
+}): Promise<QualityScoreResult | null> => {
+	const storageKey = buildQualityReportStorageKey(input.userId, input.resumeId);
+	const storageObject = await getStorageService().read(storageKey);
+	if (!storageObject) return null;
+
+	try {
+		const raw = jsonDecoder.decode(storageObject.data);
+		return fromPersistedQualityPayload(JSON.parse(raw));
+	} catch {
+		return null;
+	}
+};
+
+const scoreQuality = async (input: {
+	userId: string;
+	resumeId: string;
+	threshold?: number;
+	targetKeywords?: string[];
+}): Promise<QualityScoreResult> => {
+	const [resume] = await db
+		.select({
+			id: schema.resume.id,
+			data: schema.resume.data,
+		})
+		.from(schema.resume)
+		.where(and(eq(schema.resume.id, input.resumeId), eq(schema.resume.userId, input.userId)))
+		.limit(1);
+
+	if (!resume) {
+		throw new ORPCError("NOT_FOUND", {
+			message: "Resume not found. Refresh and try again.",
+		});
+	}
+
+	const now = new Date();
+	const storageKey = buildQualityReportStorageKey(input.userId, input.resumeId);
+	const report = runQuality({
+		generationId: `quality_${resume.id}_${now.getTime()}`,
+		resume: new JSONResumeExporter().convert(resume.data),
+		threshold: input.threshold,
+		targetKeywords: input.targetKeywords,
+	});
+
+	const result: QualityScoreResult = {
+		resumeId: resume.id,
+		generatedAt: now,
+		score: report.score,
+		bulletReport: { bullets: report.bulletScores },
+		report,
+		storageKey,
+		provider: "local-rule-engine",
+	};
+
+	await persistQualityScoreResult({ storageKey, result });
+	return result;
+};
+
+const getLatestQuality = async (input: { userId: string; resumeId: string }) => {
+	return getPersistedQualityScoreResult(input);
+};
+
+// JD tailoring generation
+
+export interface TailorGenerationOutput {
+	resumeId: string;
+	generatedAt: Date;
+	analysis: TailorJDAnalysis;
+	keywordsUsed: string[];
+	changes: TailorChange[];
+	warnings: string[];
+	tailoredData: ResumeData;
+}
+
+const generateTailored = async (input: {
+	userId: string;
+	resumeId: string;
+	jobDescription: string;
+	maxKeywords?: number;
+}): Promise<TailorGenerationOutput> => {
+	const [resume] = await db
+		.select({
+			id: schema.resume.id,
+			data: schema.resume.data,
+		})
+		.from(schema.resume)
+		.where(and(eq(schema.resume.id, input.resumeId), eq(schema.resume.userId, input.userId)))
+		.limit(1);
+
+	if (!resume) {
+		throw new ORPCError("NOT_FOUND", {
+			message: "Resume not found. Refresh and try again.",
+		});
+	}
+
+	try {
+		const result = generateTailoredResume({
+			resumeData: resume.data,
+			jobDescription: input.jobDescription,
+			maxKeywords: input.maxKeywords,
+		});
+
+		return {
+			resumeId: resume.id,
+			generatedAt: new Date(),
+			analysis: result.analysis,
+			keywordsUsed: result.keywordsUsed,
+			changes: result.changes,
+			warnings: result.warnings,
+			tailoredData: result.tailoredData,
+		};
+	} catch (error) {
+		if (error instanceof ORPCError) throw error;
+
+		if (error instanceof TailorGenerationError) {
+			throw new ORPCError("TAILORING_INPUT_INVALID", {
+				status: 400,
+				message: error.userMessage,
+				data: {
+					code: error.code,
+				},
+			});
+		}
+
+		throw new ORPCError("INTERNAL_SERVER_ERROR", {
+			message: "Unable to generate a tailored resume right now. Please try again.",
+		});
+	}
+};
+
 export const resumeosService = {
 	ats: {
-		evaluate,
-		getLatestByResumeId,
+		evaluate: evaluateAts,
+		getLatestByResumeId: getLatestAtsByResumeId,
+	},
+	quality: {
+		score: scoreQuality,
+		getLatest: getLatestQuality,
+	},
+	tailor: {
+		generate: generateTailored,
 	},
 };
