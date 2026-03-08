@@ -3,7 +3,10 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { schema } from "@/integrations/drizzle";
 import { db } from "@/integrations/drizzle/client";
 import { packetStatuses, type PacketStatus } from "@/integrations/drizzle/schema";
+import { syncUserArtifactsToDirectory } from "@/integrations/sync/engine";
+import { logger } from "@/utils/logger";
 import { generateId } from "@/utils/string";
+import { syncSettingsService } from "./sync-settings";
 
 const packetStatusSet = new Set<PacketStatus>(packetStatuses);
 let packetTablesReady = false;
@@ -114,6 +117,17 @@ const getById = async (input: { id: string; userId: string }): Promise<PacketLis
 	return { ...packet, status: normalizePacketStatus(packet.status) };
 };
 
+const syncArtifactsIfConfigured = async (userId: string) => {
+	const syncDirectory = await syncSettingsService.getSyncDirectory({ userId });
+	if (!syncDirectory) return;
+
+	try {
+		await syncUserArtifactsToDirectory({ userId, syncDirectory });
+	} catch (error) {
+		logger.error("Failed to sync artifacts after packet update.", { userId, error });
+	}
+};
+
 const createFromResume = async (input: {
 	userId: string;
 	resumeId: string;
@@ -157,7 +171,10 @@ const createFromResume = async (input: {
 		});
 	});
 
-	return getById({ id: packetId, userId: input.userId });
+	const packet = await getById({ id: packetId, userId: input.userId });
+	await syncArtifactsIfConfigured(input.userId);
+
+	return packet;
 };
 
 const setStatus = async (input: { id: string; userId: string; status: PacketStatus }): Promise<PacketListItem> => {
@@ -171,7 +188,10 @@ const setStatus = async (input: { id: string; userId: string; status: PacketStat
 
 	if (!updated) throw new ORPCError("NOT_FOUND");
 
-	return getById({ id: input.id, userId: input.userId });
+	const packet = await getById({ id: input.id, userId: input.userId });
+	await syncArtifactsIfConfigured(input.userId);
+
+	return packet;
 };
 
 export const packetService = {
