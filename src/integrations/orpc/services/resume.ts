@@ -19,10 +19,7 @@ const isResumeSlugUniqueViolation = (error: unknown) => {
 	const constraint = get(error, "cause.constraint") as string | undefined;
 	if (constraint === "resume_slug_user_id_unique") return true;
 
-	const message = [
-		get(error, "message") as string | undefined,
-		get(error, "cause.message") as string | undefined,
-	]
+	const message = [get(error, "message") as string | undefined, get(error, "cause.message") as string | undefined]
 		.filter(Boolean)
 		.join(" ");
 
@@ -133,7 +130,7 @@ export const resumeService = {
 				data: schema.resume.data,
 				isPublic: schema.resume.isPublic,
 				isLocked: schema.resume.isLocked,
-				hasPassword: sql<boolean>`${schema.resume.password} IS NOT NULL`,
+				hasPassword: sql<boolean>`(${schema.resume.password} IS NOT NULL)`.mapWith(Boolean),
 			})
 			.from(schema.resume)
 			.where(and(eq(schema.resume.id, input.id), eq(schema.resume.userId, input.userId)));
@@ -192,7 +189,7 @@ export const resumeService = {
 				isPublic: schema.resume.isPublic,
 				isLocked: schema.resume.isLocked,
 				passwordHash: schema.resume.password,
-				hasPassword: sql<boolean>`${schema.resume.password} IS NOT NULL`,
+				hasPassword: sql<boolean>`(${schema.resume.password} IS NOT NULL)`.mapWith(Boolean),
 			})
 			.from(schema.resume)
 			.innerJoin(schema.user, eq(schema.resume.userId, schema.user.id))
@@ -318,7 +315,7 @@ export const resumeService = {
 					data: schema.resume.data,
 					isPublic: schema.resume.isPublic,
 					isLocked: schema.resume.isLocked,
-					hasPassword: sql<boolean>`${schema.resume.password} IS NOT NULL`,
+					hasPassword: sql<boolean>`(${schema.resume.password} IS NOT NULL)`.mapWith(Boolean),
 				});
 
 			return resume;
@@ -373,7 +370,7 @@ export const resumeService = {
 				data: schema.resume.data,
 				isPublic: schema.resume.isPublic,
 				isLocked: schema.resume.isLocked,
-				hasPassword: sql<boolean>`${schema.resume.password} IS NOT NULL`,
+				hasPassword: sql<boolean>`(${schema.resume.password} IS NOT NULL)`.mapWith(Boolean),
 			});
 
 		return resume;

@@ -62,20 +62,19 @@ function makeDrizzleClient() {
 				return { rows: [] };
 			}
 
+			// drizzle-orm/sqlite-proxy expects each row as an array of column values in
+			// the order they appear in the query, not as an object keyed by column name.
+			statement.setReturnArrays(true);
+
 			if (method === "get") {
-				const row = statement.get(...boundParams);
-				return { rows: row ? [row] : [] };
+				const row = statement.get(...boundParams) as unknown[] | undefined;
+				return { rows: row ?? [] };
 			}
 
-			if (method === "values") {
-				const rows = statement.setReturnArrays(true).all(...boundParams);
-				return { rows };
-			}
-
-			const rows = statement.all(...boundParams);
+			const rows = statement.all(...boundParams) as unknown[];
 			return { rows };
 		},
-		{ schema },
+		{ schema, casing: "snake_case" },
 	);
 }
 

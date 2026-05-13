@@ -219,11 +219,7 @@ function buildBulletScores(
 		const clarityScore = scoreClarity(bullet.text, maxHighlightChars);
 
 		const score = Math.round(
-			0.25 * actionVerbScore +
-				0.25 * metricScore +
-				0.2 * specificityScore +
-				0.2 * relevanceScore +
-				0.1 * clarityScore,
+			0.25 * actionVerbScore + 0.25 * metricScore + 0.2 * specificityScore + 0.2 * relevanceScore + 0.1 * clarityScore,
 		);
 
 		const reasons: string[] = [];
@@ -284,7 +280,11 @@ export function runQuality(input: RunQualityInput): QualityReport {
 
 	for (const bullet of bullets) {
 		const lower = bullet.text.toLowerCase();
-		const compact = lower.replace(/\d+/g, "#").replace(/[^a-z# ]+/g, " ").replace(/\s+/g, " ").trim();
+		const compact = lower
+			.replace(/\d+/g, "#")
+			.replace(/[^a-z# ]+/g, " ")
+			.replace(/\s+/g, " ")
+			.trim();
 		if (!normalizedMap.has(compact)) normalizedMap.set(compact, []);
 		normalizedMap.get(compact)?.push(bullet);
 
@@ -366,7 +366,9 @@ export function runQuality(input: RunQualityInput): QualityReport {
 	const metricsDensity = bullets.length > 0 ? metricMatches.length / bullets.length : 0;
 	const providedKeywords = (input.targetKeywords ?? []).filter((keyword) => keyword.trim().length >= 3);
 	const targetKeywords =
-		providedKeywords.length > 0 ? providedKeywords.map((keyword) => keyword.toLowerCase()) : collectResumeKeywordsForQuality(input.resume);
+		providedKeywords.length > 0
+			? providedKeywords.map((keyword) => keyword.toLowerCase())
+			: collectResumeKeywordsForQuality(input.resume);
 
 	const topBullets = bullets.slice(0, Math.min(8, bullets.length));
 	const topText = topBullets.map((bullet) => bullet.text.toLowerCase()).join(" ");
@@ -383,13 +385,26 @@ export function runQuality(input: RunQualityInput): QualityReport {
 
 	const score = Math.round(
 		clamp(
-			100 - weakVerbPenalty - vaguenessPenalty - duplicationPenalty - buzzwordPenalty - clarityPenalty + metricsBonus + relevanceBonus,
+			100 -
+				weakVerbPenalty -
+				vaguenessPenalty -
+				duplicationPenalty -
+				buzzwordPenalty -
+				clarityPenalty +
+				metricsBonus +
+				relevanceBonus,
 			0,
 			100,
 		),
 	);
 
-	const bulletScores = buildBulletScores(bullets, config.weakVerbs, config.vagueTerms, targetKeywords, config.maxHighlightChars);
+	const bulletScores = buildBulletScores(
+		bullets,
+		config.weakVerbs,
+		config.vagueTerms,
+		targetKeywords,
+		config.maxHighlightChars,
+	);
 
 	return {
 		generationId: input.generationId,

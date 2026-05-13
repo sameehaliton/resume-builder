@@ -4,8 +4,7 @@ import { stripHtml } from "@/utils/string";
 const RENDERCV_SCHEMA_COMMENT =
 	"# yaml-language-server: $schema=https://github.com/rendercv/rendercv/blob/main/schema.json?raw=true";
 
-const ISO_DATE_REGEX =
-	/^([1-2][0-9]{3}-[0-1][0-9]-[0-3][0-9]|[1-2][0-9]{3}-[0-1][0-9]|[1-2][0-9]{3})$/;
+const ISO_DATE_REGEX = /^([1-2][0-9]{3}-[0-1][0-9]-[0-3][0-9]|[1-2][0-9]{3}-[0-1][0-9]|[1-2][0-9]{3})$/;
 
 const MONTHS: Record<string, string> = {
 	jan: "01",

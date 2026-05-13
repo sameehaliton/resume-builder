@@ -92,7 +92,7 @@ async function healthHandler() {
 
 async function checkDatabase() {
 	try {
-		await db.execute(sql`SELECT 1`);
+		await db.get(sql`SELECT 1`);
 		return { status: "healthy" };
 	} catch (error) {
 		return {

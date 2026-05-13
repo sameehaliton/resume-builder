@@ -19,7 +19,9 @@ export function PacketLifecyclePanel() {
 
 	const { data: resumes } = useQuery(orpc.resume.list.queryOptions({ input: { tags: [], sort: "lastUpdatedAt" } }));
 	const { data: packets } = useQuery(orpc.packet.list.queryOptions());
-	const { mutate: createPacket, isPending: isCreatingPacket } = useMutation(orpc.packet.createFromResume.mutationOptions());
+	const { mutate: createPacket, isPending: isCreatingPacket } = useMutation(
+		orpc.packet.createFromResume.mutationOptions(),
+	);
 	const { mutate: setPacketStatus } = useMutation(orpc.packet.setStatus.mutationOptions());
 
 	const resumeOptions = useMemo(() => {
@@ -110,7 +112,11 @@ export function PacketLifecyclePanel() {
 					}}
 				/>
 
-				<Button className="sm:w-auto" onClick={createPacketFromResume} disabled={!resolvedSelectedResumeId || isCreatingPacket}>
+				<Button
+					className="sm:w-auto"
+					onClick={createPacketFromResume}
+					disabled={!resolvedSelectedResumeId || isCreatingPacket}
+				>
 					{isCreatingPacket ? <CircleNotchIcon className="animate-spin" /> : <PlusIcon />}
 					<Trans>Create Packet</Trans>
 				</Button>

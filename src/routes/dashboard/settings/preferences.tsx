@@ -27,7 +27,10 @@ function RouteComponent() {
 		orpc.syncSettings.getSyncDirectory.queryOptions(),
 	);
 
-	const persistedSyncDirectory = useMemo(() => syncDirectorySetting?.syncDirectory ?? "", [syncDirectorySetting?.syncDirectory]);
+	const persistedSyncDirectory = useMemo(
+		() => syncDirectorySetting?.syncDirectory ?? "",
+		[syncDirectorySetting?.syncDirectory],
+	);
 	const normalizedSyncDirectory = useMemo(() => syncDirectory.trim(), [syncDirectory]);
 	const isSyncDirectoryDirty = normalizedSyncDirectory !== persistedSyncDirectory;
 
@@ -47,9 +50,12 @@ function RouteComponent() {
 			{
 				onSuccess: ({ syncDirectory: savedSyncDirectory }) => {
 					setSyncDirectory(savedSyncDirectory);
-					toast.success(t`Your sync folder has been updated. Conflicting local files are preserved as .conflict copies.`, {
-						id: toastId,
-					});
+					toast.success(
+						t`Your sync folder has been updated. Conflicting local files are preserved as .conflict copies.`,
+						{
+							id: toastId,
+						},
+					);
 				},
 				onError: (error) => {
 					toast.error(error.message, { id: toastId });
@@ -125,7 +131,9 @@ function RouteComponent() {
 								<Trans>Sync uses both content hashes and file timestamps to detect local edits.</Trans>
 							</p>
 							<p>
-								<Trans>When a conflict is detected, the local file is kept as a copy before the latest app record is written.</Trans>
+								<Trans>
+									When a conflict is detected, the local file is kept as a copy before the latest app record is written.
+								</Trans>
 							</p>
 							<p>
 								<code>&lt;id&gt;.conflict-&lt;timestamp&gt;.json</code>

@@ -37,7 +37,7 @@ let syncSettingsTableReady = false;
 const ensureSyncSettingsTable = async () => {
 	if (syncSettingsTableReady) return;
 
-	await db.execute(sql`
+	await db.run(sql`
 		CREATE TABLE IF NOT EXISTS "sync_settings" (
 			"user_id" text PRIMARY KEY NOT NULL,
 			"sync_directory" text NOT NULL,
@@ -47,7 +47,7 @@ const ensureSyncSettingsTable = async () => {
 		);
 	`);
 
-	await db.execute(sql`CREATE INDEX IF NOT EXISTS "sync_settings_updated_at_index" ON "sync_settings" ("updated_at");`);
+	await db.run(sql`CREATE INDEX IF NOT EXISTS "sync_settings_updated_at_index" ON "sync_settings" ("updated_at");`);
 
 	syncSettingsTableReady = true;
 };

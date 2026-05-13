@@ -10,14 +10,8 @@ const PNPM_BIN = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 
 const STARTUP_ATTEMPTS = parsePositiveInteger(process.env.ELECTRON_BACKEND_START_ATTEMPTS, 3);
 const STARTUP_TIMEOUT_MS = parsePositiveInteger(process.env.ELECTRON_BACKEND_STARTUP_TIMEOUT_MS, 45_000);
-const HEALTHCHECK_REQUEST_TIMEOUT_MS = parsePositiveInteger(
-	process.env.ELECTRON_BACKEND_HEALTHCHECK_TIMEOUT_MS,
-	2_500,
-);
-const HEALTHCHECK_RETRY_INTERVAL_MS = parsePositiveInteger(
-	process.env.ELECTRON_BACKEND_HEALTHCHECK_INTERVAL_MS,
-	750,
-);
+const HEALTHCHECK_REQUEST_TIMEOUT_MS = parsePositiveInteger(process.env.ELECTRON_BACKEND_HEALTHCHECK_TIMEOUT_MS, 2_500);
+const HEALTHCHECK_RETRY_INTERVAL_MS = parsePositiveInteger(process.env.ELECTRON_BACKEND_HEALTHCHECK_INTERVAL_MS, 750);
 const BACKEND_RETRY_DELAY_MS = parsePositiveInteger(process.env.ELECTRON_BACKEND_RETRY_DELAY_MS, 1_500);
 const BACKEND_STOP_TIMEOUT_MS = parsePositiveInteger(process.env.ELECTRON_BACKEND_STOP_TIMEOUT_MS, 5_000);
 
@@ -66,7 +60,7 @@ function escapeHtml(value) {
 		.replace(/&/g, "&amp;")
 		.replace(/</g, "&lt;")
 		.replace(/>/g, "&gt;")
-		.replace(/\"/g, "&quot;")
+		.replace(/"/g, "&quot;")
 		.replace(/'/g, "&#39;");
 }
 
@@ -256,7 +250,9 @@ async function waitForBackendHealth(childProcess, state) {
 		}
 
 		if (typeof childProcess.exitCode === "number" || childProcess.signalCode) {
-			throw new Error(`Backend exited before becoming healthy (${formatExitReason(childProcess.exitCode, childProcess.signalCode)})`);
+			throw new Error(
+				`Backend exited before becoming healthy (${formatExitReason(childProcess.exitCode, childProcess.signalCode)})`,
+			);
 		}
 
 		try {
@@ -300,10 +296,7 @@ async function stopManagedBackend() {
 		return;
 	}
 
-	const didTimeout = await Promise.race([
-		exited.then(() => false),
-		sleep(BACKEND_STOP_TIMEOUT_MS).then(() => true),
-	]);
+	const didTimeout = await Promise.race([exited.then(() => false), sleep(BACKEND_STOP_TIMEOUT_MS).then(() => true)]);
 
 	if (!didTimeout || typeof childProcess.exitCode === "number" || childProcess.signalCode) return;
 
@@ -364,19 +357,11 @@ async function startManagedBackend() {
 		}
 	}
 
-	throw new Error(
-		`Failed to start backend after ${STARTUP_ATTEMPTS} attempts: ${getErrorMessage(lastError)}`,
-	);
+	throw new Error(`Failed to start backend after ${STARTUP_ATTEMPTS} attempts: ${getErrorMessage(lastError)}`);
 }
 
 async function createWindow() {
 	mainWindow = new BrowserWindow({
-const { app, BrowserWindow } = require("electron");
-
-const DEFAULT_DEV_SERVER_URL = "http://127.0.0.1:3000";
-
-const createWindow = async () => {
-	const window = new BrowserWindow({
 		width: 1440,
 		height: 900,
 		minWidth: 1100,
@@ -399,10 +384,17 @@ const createWindow = async () => {
 		mainWindow = undefined;
 	});
 
-	await mainWindow.loadURL(appUrl);
+	if (!app.isPackaged || process.env.ELECTRON_DEV_SERVER_URL) {
+		await mainWindow.loadURL(appUrl);
+		return;
+	}
+
+	const packagedIndexHtmlPath = path.join(app.getAppPath(), ".output", "public", "index.html");
+	await mainWindow.loadFile(packagedIndexHtmlPath);
 }
 
-app.whenReady()
+app
+	.whenReady()
 	.then(async () => {
 		backendUrl = normalizeUrl(process.env.ELECTRON_BACKEND_URL, DEFAULT_LOCAL_APP_URL);
 		appUrl = normalizeUrl(process.env.ELECTRON_DEV_SERVER_URL ?? backendUrl, backendUrl);
@@ -436,29 +428,6 @@ app.whenReady()
 app.on("before-quit", () => {
 	isQuitting = true;
 	void stopManagedBackend();
-	window.once("ready-to-show", () => {
-		window.show();
-	});
-
-	const devServerUrl = process.env.ELECTRON_DEV_SERVER_URL ?? DEFAULT_DEV_SERVER_URL;
-
-	if (!app.isPackaged || process.env.ELECTRON_DEV_SERVER_URL) {
-		await window.loadURL(devServerUrl);
-		return;
-	}
-
-	const packagedIndexHtmlPath = path.join(app.getAppPath(), ".output", "public", "index.html");
-	await window.loadFile(packagedIndexHtmlPath);
-};
-
-app.whenReady().then(async () => {
-	await createWindow();
-
-	app.on("activate", async () => {
-		if (BrowserWindow.getAllWindows().length === 0) {
-			await createWindow();
-		}
-	});
 });
 
 app.on("window-all-closed", () => {
