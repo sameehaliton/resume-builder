@@ -1,8 +1,8 @@
 import { apiKeyClient } from "@better-auth/api-key/client";
 import { genericOAuthClient, inferAdditionalFields, twoFactorClient, usernameClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
-import { createDesktopLocalSession, isDesktopMode } from "./local-session";
 import type { auth } from "./config";
+import { createDesktopLocalSession, isDesktopMode } from "./local-session";
 
 const getAuthClient = () => {
 	return createAuthClient({

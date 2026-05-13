@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { env } from "@/utils/env";
 import type { Locale } from "@/utils/locale";
 import { auth } from "../auth/config";
+import { isDesktopMode, resolveDesktopSession } from "../auth/local-session";
 import { db } from "../drizzle/client";
 import { user } from "../drizzle/schema";
 
@@ -15,12 +16,17 @@ interface ORPCContext {
 async function getUserFromHeaders(headers: Headers): Promise<User | null> {
 	try {
 		const result = await auth.api.getSession({ headers });
-		if (!result || !result.user) return null;
-
-		return result.user;
+		if (result?.user) return result.user;
 	} catch {
-		return null;
+		// fall through to desktop-local-session resolution
 	}
+
+	if (isDesktopMode()) {
+		const desktopSession = resolveDesktopSession(null);
+		if (desktopSession) return desktopSession.user as unknown as User;
+	}
+
+	return null;
 }
 
 async function getUserFromApiKey(apiKey: string): Promise<User | null> {

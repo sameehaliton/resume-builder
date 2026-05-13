@@ -8,6 +8,8 @@ import { db } from "@/integrations/drizzle/client";
 import { env } from "@/utils/env";
 import { hashPassword, verifyPassword } from "@/utils/password";
 import { generateId, toUsername } from "@/utils/string";
+import { schema } from "../drizzle";
+import { sendEmail } from "../email/service";
 import {
 	createDesktopLocalSession,
 	DESKTOP_LOCAL_USER_EMAIL,
@@ -16,8 +18,6 @@ import {
 	DESKTOP_LOCAL_USERNAME,
 	isDesktopMode,
 } from "./local-session";
-import { schema } from "../drizzle";
-import { sendEmail } from "../email/service";
 
 function isCustomOAuthProviderEnabled() {
 	const hasDiscovery = Boolean(env.OAUTH_DISCOVERY_URL);
@@ -131,7 +131,7 @@ const getAuthConfig = () => {
 		baseURL: env.APP_URL,
 		secret: env.AUTH_SECRET,
 
-		database: drizzleAdapter(db, { schema, provider: "pg" }),
+		database: drizzleAdapter(db, { schema, provider: "sqlite" }),
 
 		telemetry: { enabled: false },
 		trustedOrigins: getTrustedOrigins(),

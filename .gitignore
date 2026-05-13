@@ -5,6 +5,7 @@ dist
 .output
 .vercel
 .cursor
+.claude
 TODO.md
 coverage
 .netlify
@@ -17,3 +18,6 @@ public/sw.js.map
 scripts/**/*.json
 public/workbox-*.js
 public/workbox-*.js.map
+tests/.artifacts
+*.sqlite
+*.sqlite-journal

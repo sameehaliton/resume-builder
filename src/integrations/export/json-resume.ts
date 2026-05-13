@@ -22,8 +22,7 @@ import { stripHtml } from "@/utils/string";
 
 const JSON_RESUME_SCHEMA_URL = "https://raw.githubusercontent.com/jsonresume/resume-schema/v1.0.0/schema.json";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const ISO_DATE_REGEX =
-	/^([1-2][0-9]{3}-[0-1][0-9]-[0-3][0-9]|[1-2][0-9]{3}-[0-1][0-9]|[1-2][0-9]{3})$/;
+const ISO_DATE_REGEX = /^([1-2][0-9]{3}-[0-1][0-9]-[0-3][0-9]|[1-2][0-9]{3}-[0-1][0-9]|[1-2][0-9]{3})$/;
 
 const MONTHS: Record<string, string> = {
 	jan: "01",
@@ -228,9 +227,7 @@ function mapBasics(resumeData: ResumeData): JSONResumeBasics | undefined {
 	const summary = resumeData.summary.hidden ? undefined : toNonEmptyString(stripHtml(resumeData.summary.content));
 	const basics: JSONResumeBasics = {
 		...(toNonEmptyString(resumeData.basics.name) ? { name: toNonEmptyString(resumeData.basics.name) } : {}),
-		...(toNonEmptyString(resumeData.basics.headline)
-			? { label: toNonEmptyString(resumeData.basics.headline) }
-			: {}),
+		...(toNonEmptyString(resumeData.basics.headline) ? { label: toNonEmptyString(resumeData.basics.headline) } : {}),
 		...(sanitizeEmail(resumeData.basics.email) ? { email: sanitizeEmail(resumeData.basics.email) } : {}),
 		...(toNonEmptyString(resumeData.basics.phone) ? { phone: toNonEmptyString(resumeData.basics.phone) } : {}),
 		...(website ? { url: website } : {}),

@@ -20,8 +20,8 @@ export const env = createEnv({
 		// Printer
 		PRINTER_ENDPOINT: z.url({ protocol: /^(wss?|https?)$/ }),
 
-		// Database
-		DATABASE_URL: z.url({ protocol: /postgres(ql)?/ }),
+		// Database (SQLite — file path, file: URL, or sqlite: URL)
+		DATABASE_URL: z.string().min(1),
 
 		// Authentication
 		AUTH_SECRET: z.string().min(1),

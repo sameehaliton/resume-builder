@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { access, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { asc, eq, sql } from "drizzle-orm";
 import { schema } from "@/integrations/drizzle";
@@ -191,7 +191,7 @@ async function readExistingSyncIndex(directory: string): Promise<ParsedSyncIndex
 }
 
 async function readExistingRecordState(filePath: string): Promise<ExistingRecordState> {
-	let fileStats;
+	let fileStats: Awaited<ReturnType<typeof stat>> | undefined;
 	try {
 		fileStats = await stat(filePath);
 	} catch (error) {
@@ -253,7 +253,7 @@ function getConflictReason(input: { hashSignal: boolean; timestampSignal: boolea
 async function ensurePacketLifecycleTablesForSync() {
 	if (packetTablesReadyForSync) return;
 
-	await db.execute(sql`
+	await db.run(sql`
 		CREATE TABLE IF NOT EXISTS "resume_snapshot" (
 			"id" text PRIMARY KEY NOT NULL,
 			"resume_id" text NOT NULL,
@@ -267,7 +267,7 @@ async function ensurePacketLifecycleTablesForSync() {
 		);
 	`);
 
-	await db.execute(sql`
+	await db.run(sql`
 		CREATE TABLE IF NOT EXISTS "packet" (
 			"id" text PRIMARY KEY NOT NULL,
 			"user_id" text NOT NULL,
@@ -284,14 +284,14 @@ async function ensurePacketLifecycleTablesForSync() {
 	`);
 
 	await Promise.all([
-		db.execute(sql`CREATE INDEX IF NOT EXISTS "resume_snapshot_user_id_index" ON "resume_snapshot" ("user_id");`),
-		db.execute(sql`CREATE INDEX IF NOT EXISTS "resume_snapshot_resume_id_index" ON "resume_snapshot" ("resume_id");`),
-		db.execute(sql`CREATE INDEX IF NOT EXISTS "resume_snapshot_created_at_index" ON "resume_snapshot" ("created_at");`),
-		db.execute(sql`CREATE INDEX IF NOT EXISTS "packet_user_id_index" ON "packet" ("user_id");`),
-		db.execute(sql`CREATE INDEX IF NOT EXISTS "packet_resume_id_index" ON "packet" ("resume_id");`),
-		db.execute(sql`CREATE INDEX IF NOT EXISTS "packet_snapshot_id_index" ON "packet" ("snapshot_id");`),
-		db.execute(sql`CREATE INDEX IF NOT EXISTS "packet_status_user_id_index" ON "packet" ("status", "user_id");`),
-		db.execute(sql`CREATE INDEX IF NOT EXISTS "packet_updated_at_index" ON "packet" ("updated_at");`),
+		db.run(sql`CREATE INDEX IF NOT EXISTS "resume_snapshot_user_id_index" ON "resume_snapshot" ("user_id");`),
+		db.run(sql`CREATE INDEX IF NOT EXISTS "resume_snapshot_resume_id_index" ON "resume_snapshot" ("resume_id");`),
+		db.run(sql`CREATE INDEX IF NOT EXISTS "resume_snapshot_created_at_index" ON "resume_snapshot" ("created_at");`),
+		db.run(sql`CREATE INDEX IF NOT EXISTS "packet_user_id_index" ON "packet" ("user_id");`),
+		db.run(sql`CREATE INDEX IF NOT EXISTS "packet_resume_id_index" ON "packet" ("resume_id");`),
+		db.run(sql`CREATE INDEX IF NOT EXISTS "packet_snapshot_id_index" ON "packet" ("snapshot_id");`),
+		db.run(sql`CREATE INDEX IF NOT EXISTS "packet_status_user_id_index" ON "packet" ("status", "user_id");`),
+		db.run(sql`CREATE INDEX IF NOT EXISTS "packet_updated_at_index" ON "packet" ("updated_at");`),
 	]);
 
 	packetTablesReadyForSync = true;
@@ -331,7 +331,8 @@ async function syncCollection<T extends { id: string }>(input: SyncCollectionInp
 		const existingRecord = await readExistingRecordState(filePath);
 		if (existingRecord.exists && existingRecord.hash !== incomingHash) {
 			const previousIndexHash = existingSyncIndex.recordHashes.get(record.id) ?? null;
-			const hashSignal = previousIndexHash === null || existingRecord.hash === null || existingRecord.hash !== previousIndexHash;
+			const hashSignal =
+				previousIndexHash === null || existingRecord.hash === null || existingRecord.hash !== previousIndexHash;
 			const timestampSignal =
 				existingRecord.modifiedAt !== null &&
 				existingSyncIndex.generatedAt !== null &&

@@ -1,6 +1,6 @@
-import { ORPCError } from "@orpc/server";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { ORPCError } from "@orpc/server";
 import type { InferSelectModel } from "drizzle-orm";
 import puppeteer, { type Browser, type ConnectOptions, type Page } from "puppeteer-core";
 import type { schema } from "@/integrations/drizzle";
@@ -98,11 +98,11 @@ function isMissingLocalRuntimeError(error: unknown): boolean {
 		message.includes("executablepath") ||
 		message.includes("browser was not found") ||
 		message.includes("failed to launch the browser process") ||
-		message.includes("spawn") && message.includes("enoent")
+		(message.includes("spawn") && message.includes("enoent"))
 	);
 }
 
-function toPrinterORPCError(error: unknown): ORPCError {
+function toPrinterORPCError(error: unknown): ORPCError<string, unknown> {
 	if (error instanceof ORPCError) return error;
 
 	if (getPrinterRuntimeMode() === "local" && isMissingLocalRuntimeError(error)) {

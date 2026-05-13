@@ -3,21 +3,13 @@ import * as sqlite from "drizzle-orm/sqlite-core";
 import { defaultResumeData, type ResumeData } from "../../schema/resume/data";
 import { generateId } from "../../utils/string";
 
-export const packetStatuses = [
-	"draft",
-	"ready",
-	"applied",
-	"interview",
-	"offer",
-	"rejected",
-	"archived",
-] as const;
+export const packetStatuses = ["draft", "ready", "applied", "interview", "offer", "rejected", "archived"] as const;
 
 export type PacketStatus = (typeof packetStatuses)[number];
 
 const timestamp = () =>
 	sqlite
-		.integer({ mode: "timestamp" })
+		.integer("updated_at", { mode: "timestamp" })
 		.notNull()
 		.default(sql`(unixepoch())`)
 		.$onUpdate(() => /* @__PURE__ */ new Date());
@@ -62,7 +54,10 @@ export const session = sqlite.sqliteTable(
 		createdAt: sqlite.integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 		updatedAt: timestamp(),
 	},
-	(t) => [sqlite.index("session_token_user_id_index").on(t.token, t.userId), sqlite.index("session_expires_at_index").on(t.expiresAt)],
+	(t) => [
+		sqlite.index("session_token_user_id_index").on(t.token, t.userId),
+		sqlite.index("session_expires_at_index").on(t.expiresAt),
+	],
 );
 
 export const account = sqlite.sqliteTable(
@@ -161,7 +156,11 @@ export const resume = sqlite.sqliteTable(
 			.$defaultFn(() => generateId()),
 		name: sqlite.text("name").notNull(),
 		slug: sqlite.text("slug").notNull(),
-		tags: sqlite.text("tags", { mode: "json" }).$type<string[]>().notNull().$defaultFn(() => []),
+		tags: sqlite
+			.text("tags", { mode: "json" })
+			.$type<string[]>()
+			.notNull()
+			.$defaultFn(() => []),
 		isPublic: sqlite.integer("is_public", { mode: "boolean" }).notNull().default(false),
 		isLocked: sqlite.integer("is_locked", { mode: "boolean" }).notNull().default(false),
 		password: sqlite.text("password"),

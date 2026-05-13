@@ -1,22 +1,22 @@
 import { ORPCError } from "@orpc/client";
 import { and, desc, eq, sql } from "drizzle-orm";
 import * as sqlite from "drizzle-orm/sqlite-core";
-import type { ResumeData } from "@/schema/resume/data";
-import {
-	atsReportSchema,
-	evaluateAtsReport,
-	generateTailoredResume,
-	runQuality,
-	TailorGenerationError,
-	type AtsReport,
-	type BulletScore,
-	type QualityReport,
-	type TailorChange,
-	type TailorJDAnalysis,
-} from "@/integrations/resumeos";
 import { schema } from "@/integrations/drizzle";
 import { db } from "@/integrations/drizzle/client";
 import { JSONResumeExporter } from "@/integrations/export/json-resume";
+import {
+	type AtsReport,
+	atsReportSchema,
+	type BulletScore,
+	evaluateAtsReport,
+	generateTailoredResume,
+	type QualityReport,
+	runQuality,
+	type TailorChange,
+	TailorGenerationError,
+	type TailorJDAnalysis,
+} from "@/integrations/resumeos";
+import type { ResumeData } from "@/schema/resume/data";
 import { generateId } from "@/utils/string";
 import { getStorageService } from "./storage";
 
@@ -71,7 +71,7 @@ let atsReportTableReady = false;
 const ensureAtsReportTable = async () => {
 	if (atsReportTableReady) return;
 
-	await db.execute(sql`
+	await db.run(sql`
 		CREATE TABLE IF NOT EXISTS "resume_ats_report" (
 			"id" text PRIMARY KEY NOT NULL,
 			"user_id" text NOT NULL,
@@ -91,9 +91,9 @@ const ensureAtsReportTable = async () => {
 	`);
 
 	await Promise.all([
-		db.execute(sql`CREATE INDEX IF NOT EXISTS "resume_ats_report_user_id_index" ON "resume_ats_report" ("user_id");`),
-		db.execute(sql`CREATE INDEX IF NOT EXISTS "resume_ats_report_resume_id_index" ON "resume_ats_report" ("resume_id");`),
-		db.execute(sql`CREATE INDEX IF NOT EXISTS "resume_ats_report_updated_at_index" ON "resume_ats_report" ("updated_at");`),
+		db.run(sql`CREATE INDEX IF NOT EXISTS "resume_ats_report_user_id_index" ON "resume_ats_report" ("user_id");`),
+		db.run(sql`CREATE INDEX IF NOT EXISTS "resume_ats_report_resume_id_index" ON "resume_ats_report" ("resume_id");`),
+		db.run(sql`CREATE INDEX IF NOT EXISTS "resume_ats_report_updated_at_index" ON "resume_ats_report" ("updated_at");`),
 	]);
 
 	atsReportTableReady = true;

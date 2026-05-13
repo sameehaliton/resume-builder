@@ -220,11 +220,9 @@ const parseJobDescription = (jobDescription: string): TailorJDAnalysis => {
 };
 
 const keywordsFromAnalysis = (analysis: TailorJDAnalysis, maxKeywords: number) => {
-	const merged = [
-		...analysis.requiredSkills,
-		...analysis.preferredSkills.slice(0, 8),
-		...analysis.keywords,
-	].map((keyword) => normalizeWhitespace(keyword));
+	const merged = [...analysis.requiredSkills, ...analysis.preferredSkills.slice(0, 8), ...analysis.keywords].map(
+		(keyword) => normalizeWhitespace(keyword),
+	);
 
 	return dedupe(merged)
 		.map((keyword) => keyword.toLowerCase())
@@ -322,7 +320,9 @@ const reorderSectionsByRelevance = (resumeData: ResumeData, keywords: string[], 
 		changes.push({
 			path: "sections.experience.items",
 			reason: "Reordered experience entries by relevance to JD keywords.",
-			before: experienceWithScores.map((entry) => entry.item.company || entry.item.position || entry.item.id).join(" | "),
+			before: experienceWithScores
+				.map((entry) => entry.item.company || entry.item.position || entry.item.id)
+				.join(" | "),
 			after: sortedExperience.map((entry) => entry.item.company || entry.item.position || entry.item.id).join(" | "),
 		});
 		resumeData.sections.experience.items = sortedExperience.map((entry) => entry.item);
@@ -386,7 +386,10 @@ const updateSummaryAndHeadline = (
 export const generateTailoredResume = (input: TailorInput): TailorGenerationResult => {
 	const jobDescription = input.jobDescription.trim();
 	if (!jobDescription) {
-		throw new TailorGenerationError("missing_jd", "Please provide the job description text to generate a tailored resume.");
+		throw new TailorGenerationError(
+			"missing_jd",
+			"Please provide the job description text to generate a tailored resume.",
+		);
 	}
 
 	if (jobDescription.length < MIN_JOB_DESCRIPTION_LENGTH) {
@@ -416,7 +419,9 @@ export const generateTailoredResume = (input: TailorInput): TailorGenerationResu
 	reorderSectionsByRelevance(tailoredData, keywordsUsed, changes);
 
 	if (!hasBulletContent) {
-		warnings.push("No bullet lists were found in experience/projects; only section ordering and summary updates were applied.");
+		warnings.push(
+			"No bullet lists were found in experience/projects; only section ordering and summary updates were applied.",
+		);
 	}
 
 	if (changes.length === 0) {

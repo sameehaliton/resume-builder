@@ -2,7 +2,7 @@ import { ORPCError } from "@orpc/client";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { schema } from "@/integrations/drizzle";
 import { db } from "@/integrations/drizzle/client";
-import { packetStatuses, type PacketStatus } from "@/integrations/drizzle/schema";
+import { type PacketStatus, packetStatuses } from "@/integrations/drizzle/schema";
 import { syncUserArtifactsToDirectory } from "@/integrations/sync/engine";
 import { logger } from "@/utils/logger";
 import { generateId } from "@/utils/string";
@@ -14,7 +14,7 @@ let packetTablesReady = false;
 const ensurePacketLifecycleTables = async () => {
 	if (packetTablesReady) return;
 
-	await db.execute(sql`
+	await db.run(sql`
 		CREATE TABLE IF NOT EXISTS "resume_snapshot" (
 			"id" text PRIMARY KEY NOT NULL,
 			"resume_id" text NOT NULL,
@@ -28,7 +28,7 @@ const ensurePacketLifecycleTables = async () => {
 		);
 	`);
 
-	await db.execute(sql`
+	await db.run(sql`
 		CREATE TABLE IF NOT EXISTS "packet" (
 			"id" text PRIMARY KEY NOT NULL,
 			"user_id" text NOT NULL,
@@ -45,14 +45,14 @@ const ensurePacketLifecycleTables = async () => {
 	`);
 
 	await Promise.all([
-		db.execute(sql`CREATE INDEX IF NOT EXISTS "resume_snapshot_user_id_index" ON "resume_snapshot" ("user_id");`),
-		db.execute(sql`CREATE INDEX IF NOT EXISTS "resume_snapshot_resume_id_index" ON "resume_snapshot" ("resume_id");`),
-		db.execute(sql`CREATE INDEX IF NOT EXISTS "resume_snapshot_created_at_index" ON "resume_snapshot" ("created_at");`),
-		db.execute(sql`CREATE INDEX IF NOT EXISTS "packet_user_id_index" ON "packet" ("user_id");`),
-		db.execute(sql`CREATE INDEX IF NOT EXISTS "packet_resume_id_index" ON "packet" ("resume_id");`),
-		db.execute(sql`CREATE INDEX IF NOT EXISTS "packet_snapshot_id_index" ON "packet" ("snapshot_id");`),
-		db.execute(sql`CREATE INDEX IF NOT EXISTS "packet_status_user_id_index" ON "packet" ("status", "user_id");`),
-		db.execute(sql`CREATE INDEX IF NOT EXISTS "packet_updated_at_index" ON "packet" ("updated_at");`),
+		db.run(sql`CREATE INDEX IF NOT EXISTS "resume_snapshot_user_id_index" ON "resume_snapshot" ("user_id");`),
+		db.run(sql`CREATE INDEX IF NOT EXISTS "resume_snapshot_resume_id_index" ON "resume_snapshot" ("resume_id");`),
+		db.run(sql`CREATE INDEX IF NOT EXISTS "resume_snapshot_created_at_index" ON "resume_snapshot" ("created_at");`),
+		db.run(sql`CREATE INDEX IF NOT EXISTS "packet_user_id_index" ON "packet" ("user_id");`),
+		db.run(sql`CREATE INDEX IF NOT EXISTS "packet_resume_id_index" ON "packet" ("resume_id");`),
+		db.run(sql`CREATE INDEX IF NOT EXISTS "packet_snapshot_id_index" ON "packet" ("snapshot_id");`),
+		db.run(sql`CREATE INDEX IF NOT EXISTS "packet_status_user_id_index" ON "packet" ("status", "user_id");`),
+		db.run(sql`CREATE INDEX IF NOT EXISTS "packet_updated_at_index" ON "packet" ("updated_at");`),
 	]);
 
 	packetTablesReady = true;

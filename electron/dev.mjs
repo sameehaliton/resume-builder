@@ -30,20 +30,10 @@ const startWebServer = () =>
 	});
 
 const startElectron = (url) =>
-	spawn(
-		NPM_BIN,
-		[
-			"exec",
-			"--yes",
-			"--package=electron@35.0.1",
-			"electron",
-			"electron/main.cjs",
-		],
-		{
-			stdio: "inherit",
-			env: { ...process.env, ELECTRON_DEV_SERVER_URL: url },
-		},
-	);
+	spawn(NPM_BIN, ["exec", "--yes", "--package=electron@35.0.1", "electron", "electron/main.cjs"], {
+		stdio: "inherit",
+		env: { ...process.env, ELECTRON_DEV_SERVER_URL: url },
+	});
 
 const shutdown = (children) => {
 	for (const child of children) {

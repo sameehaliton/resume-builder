@@ -219,7 +219,9 @@ const getAllResumeText = (resumeData: ResumeData) => {
 	return {
 		richTextBlocks,
 		impactStatements,
-		fullText: normalizeWhitespace(`${basicsText} ${summaryText} ${experienceText} ${projectText} ${educationText} ${skillText}`),
+		fullText: normalizeWhitespace(
+			`${basicsText} ${summaryText} ${experienceText} ${projectText} ${educationText} ${skillText}`,
+		),
 	};
 };
 
@@ -286,6 +288,7 @@ const evaluateFormatting = (richTextBlocks: string[], impactStatements: string[]
 			issues.push(`statement[${index}] exceeds recommended length`);
 		}
 
+		// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional non-printable-ASCII detector for ATS parser reliability
 		if (/[^\x09\x0A\x0D\x20-\x7E]/.test(statement)) {
 			issues.push(`statement[${index}] contains non-ASCII characters that may reduce parser reliability`);
 		}
@@ -348,8 +351,12 @@ const evaluateImpactEvidence = (impactStatements: string[]): AtsCheckResult => {
 		};
 	}
 
-	const quantifiedStatements = impactStatements.filter((statement) => QUANTIFIABLE_IMPACT_PATTERN.test(statement)).length;
-	const actionLedStatements = impactStatements.filter((statement) => STRONG_ACTION_VERBS.has(firstToken(statement))).length;
+	const quantifiedStatements = impactStatements.filter((statement) =>
+		QUANTIFIABLE_IMPACT_PATTERN.test(statement),
+	).length;
+	const actionLedStatements = impactStatements.filter((statement) =>
+		STRONG_ACTION_VERBS.has(firstToken(statement)),
+	).length;
 
 	const metricRatio = quantifiedStatements / impactStatements.length;
 	const actionRatio = actionLedStatements / impactStatements.length;

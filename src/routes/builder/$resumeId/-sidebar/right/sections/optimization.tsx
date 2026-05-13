@@ -41,7 +41,9 @@ export function OptimizationSectionBuilder() {
 	const [tailorResult, setTailorResult] = useState<TailorResult | null>(null);
 	const [isTailorApplied, setIsTailorApplied] = useState(false);
 
-	const { mutateAsync: evaluateAts, isPending: isAtsPending } = useMutation(orpc.resumeos.ats.evaluate.mutationOptions());
+	const { mutateAsync: evaluateAts, isPending: isAtsPending } = useMutation(
+		orpc.resumeos.ats.evaluate.mutationOptions(),
+	);
 	const { mutateAsync: scoreQuality, isPending: isQualityPending } = useMutation(
 		orpc.resumeos.quality.score.mutationOptions(),
 	);
@@ -266,7 +268,17 @@ type ActionCardProps = {
 	children: React.ReactNode;
 };
 
-function ActionCard({ title, description, isPending, error, buttonLabel, pendingLabel, onRun, icon, children }: ActionCardProps) {
+function ActionCard({
+	title,
+	description,
+	isPending,
+	error,
+	buttonLabel,
+	pendingLabel,
+	onRun,
+	icon,
+	children,
+}: ActionCardProps) {
 	return (
 		<div className="space-y-3 rounded-md border p-3">
 			<div className="space-y-1">
@@ -274,7 +286,13 @@ function ActionCard({ title, description, isPending, error, buttonLabel, pending
 				<p className="text-muted-foreground text-xs">{description}</p>
 			</div>
 
-			<Button size="sm" variant="outline" onClick={() => void onRun()} disabled={isPending} className="w-full justify-start">
+			<Button
+				size="sm"
+				variant="outline"
+				onClick={() => void onRun()}
+				disabled={isPending}
+				className="w-full justify-start"
+			>
 				{isPending ? <CircleNotchIcon className="animate-spin" /> : icon}
 				{isPending ? pendingLabel : buttonLabel}
 			</Button>

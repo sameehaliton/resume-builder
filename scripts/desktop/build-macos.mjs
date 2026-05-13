@@ -16,7 +16,9 @@ const rawArgs = process.argv.slice(2);
 const isHelpRequested = rawArgs.includes("--help") || rawArgs.includes("-h");
 
 if (isHelpRequested) {
-	console.log(`Usage: node scripts/desktop/build-macos.mjs [--signed] [--notarize]\n\nModes:\n  default             Unsigned DMG/ZIP build\n  --signed            Signed DMG/ZIP build (requires CSC_LINK and CSC_KEY_PASSWORD)\n  --signed --notarize Signed DMG/ZIP build with notarization + stapling`);
+	console.log(
+		`Usage: node scripts/desktop/build-macos.mjs [--signed] [--notarize]\n\nModes:\n  default             Unsigned DMG/ZIP build\n  --signed            Signed DMG/ZIP build (requires CSC_LINK and CSC_KEY_PASSWORD)\n  --signed --notarize Signed DMG/ZIP build with notarization + stapling`,
+	);
 	process.exit(0);
 }
 

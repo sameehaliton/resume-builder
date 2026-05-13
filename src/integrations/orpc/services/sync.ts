@@ -1,5 +1,5 @@
 import { ORPCError } from "@orpc/server";
-import { syncUserArtifactsToDirectory, type ArtifactSyncResult } from "@/integrations/sync/engine";
+import { type ArtifactSyncResult, syncUserArtifactsToDirectory } from "@/integrations/sync/engine";
 import { syncSettingsService } from "./sync-settings";
 
 export const syncService = {

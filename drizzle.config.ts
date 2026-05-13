@@ -14,6 +14,7 @@ const resolveMigrationUrl = () => {
 export default defineConfig({
 	out: "./migrations",
 	dialect: "sqlite",
+	casing: "snake_case",
 	schema: "./src/integrations/drizzle/schema.ts",
 	dbCredentials: {
 		url: resolveMigrationUrl(),

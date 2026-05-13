@@ -81,8 +81,8 @@ export function ExportSectionBuilder() {
 					<h6 className="font-medium">RenderCV YAML</h6>
 					<p className="text-muted-foreground text-xs leading-normal">
 						<Trans>
-							Download a RenderCV-compatible YAML file. Then run rendercv render filename.rendercv.yaml in your
-							terminal to compile it.
+							Download a RenderCV-compatible YAML file. Then run rendercv render filename.rendercv.yaml in your terminal
+							to compile it.
 						</Trans>
 					</p>
 				</div>

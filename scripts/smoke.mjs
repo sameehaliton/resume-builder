@@ -64,7 +64,7 @@ function resolveBaseEnv() {
 		APP_URL: parsedAppUrl.origin,
 		PRINTER_APP_URL: env.PRINTER_APP_URL ?? parsedAppUrl.origin,
 		PRINTER_ENDPOINT: env.PRINTER_ENDPOINT ?? "ws://127.0.0.1:4000?token=1234567890",
-		DATABASE_URL: env.DATABASE_URL ?? "postgres://postgres:postgres@127.0.0.1:5432/postgres",
+		DATABASE_URL: env.DATABASE_URL ?? "file:./tests/.artifacts/smoke.sqlite",
 		AUTH_SECRET: env.AUTH_SECRET ?? "reactive-resume-smoke-secret",
 		DESKTOP_MODE: process.env.DESKTOP_MODE ?? "true",
 	};
@@ -72,7 +72,7 @@ function resolveBaseEnv() {
 
 function buildRequestError(method, path, response, payload) {
 	const detail =
-		typeof payload === "string" ? payload : payload?.message ?? payload?.error?.message ?? JSON.stringify(payload);
+		typeof payload === "string" ? payload : (payload?.message ?? payload?.error?.message ?? JSON.stringify(payload));
 	return new Error(`${method} ${path} failed with ${response.status} ${response.statusText}: ${detail}`);
 }
 
